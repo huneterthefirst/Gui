@@ -1,11 +1,19 @@
---========================================================--
--- NOVIER // CYBERPUNK V3 ENGINE (ALL-IN-ONE STANDALONE)
---========================================================--
+--[[
+    NOVIER // CYBERPUNK V3 ENGINE
+    - Matrix Code Rain Background
+    - 16-Band Real-Time Audio Spectrum Visualizer
+    - Media Controller (Sound Player, Dynamic Loudness Detection)
+    - Live Telemetry (FPS, Ping, Memory, Uptime)
+    - Virtual Terminal / Output Console
+    - Unclipped Popouts & Hierarchy Protection
+]]
 
 local Novier = {}
 Novier.__index = Novier
 
--- Services
+--========================================================--
+-- SERVICES & DRIVERS
+--========================================================--
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -16,7 +24,9 @@ local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Theme & Palette
+--========================================================--
+-- PALETTE & CONFIG
+--========================================================--
 Novier.Version = "3.0.0 CYBER"
 
 Novier.Theme = {
@@ -56,7 +66,9 @@ Novier.Config = {
 Novier._Connections = {}
 Novier._ActiveDropdown = nil
 
--- Safe creation helper
+--========================================================--
+-- UTILITIES
+--========================================================--
 local function create(className, properties, children)
     local inst = Instance.new(className)
     for prop, val in pairs(properties or {}) do
@@ -92,7 +104,7 @@ local function getGuiContainer()
 end
 
 --========================================================--
--- WINDOW CONSTRUCTOR
+-- WINDOW & ENGINE CORE
 --========================================================--
 function Novier:CreateWindow(windowTitle)
     if Novier._Gui then Novier:Destroy() end
@@ -205,7 +217,7 @@ function Novier:CreateWindow(windowTitle)
         Parent = Main
     })
 
-    -- Topbar & Visualizer
+    -- Topbar
     local Topbar = create("Frame", {
         Name = "Topbar",
         Size = UDim2.new(1, 0, 0, 48),
@@ -252,6 +264,7 @@ function Novier:CreateWindow(windowTitle)
         Parent = Topbar
     })
 
+    -- Visualizer Bars
     local VisualizerHolder = create("Frame", {
         Name = "VisualizerHolder",
         Size = UDim2.fromOffset(140, 22),
@@ -363,7 +376,7 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    -- Working Sound Track
+    -- Working Audio Engine
     local ActiveSound = create("Sound", {
         Name = "NovierAudioStream",
         Volume = 0.5,
@@ -400,7 +413,7 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    -- Main Layout
+    -- Body Frame
     local Body = create("Frame", {
         Name = "Body",
         Size = UDim2.new(1, 0, 1, -74),
@@ -467,6 +480,7 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
+    -- Telemetry HUD
     local FooterHUD = create("Frame", {
         Name = "FooterHUD",
         Size = UDim2.new(1, 0, 0, 26),
@@ -1114,10 +1128,10 @@ function Novier:CreateWindow(windowTitle)
         return Tab
     end
 
-    -- Media Suite
+    -- Media Suite (Parented correctly to ControlsHolder)
     function Window:CreateMediaSuite(defaultTrackTable)
         local tracks = defaultTrackTable or {
-            ["Synth Loop"]        = "rbxassetid://9043887091",
+            ["Synth Action"]      = "rbxassetid://9043887091",
             ["Action Electronic"] = "rbxassetid://1840590064",
             ["Dark Cyber"]        = "rbxassetid://1843404009"
         }
@@ -1285,75 +1299,4 @@ function Novier:Destroy()
     end
 end
 
---========================================================--
--- EXECUTION & UI INITIALIZER
---========================================================--
-
-local Window = Novier:CreateWindow("NOVIER // ZERO-DAY KERNEL")
-
--- 1. Initialize Media Suite
-local MediaSuite = Window:CreateMediaSuite({
-    ["Synth Action"]    = "rbxassetid://9043887091",
-    ["Action Drive"]    = "rbxassetid://1840590064",
-    ["Dark Cyber"]      = "rbxassetid://1843404009"
-})
-
--- 2. Locomotion / Player
-local CombatTab = Window:CreateTab("PLAYER", "⚡")
-local MovementSec = CombatTab:CreateSection("Locomotion Engine")
-
-MovementSec:CreateToggle("Super Jump", false, function(enabled)
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char:FindFirstChildOfClass("Humanoid").UseJumpPower = true
-        char:FindFirstChildOfClass("Humanoid").JumpPower = enabled and 120 or 50
-    end
-end)
-
-MovementSec:CreateSlider("WalkSpeed Velocity", 16, 250, 16, 1, function(val)
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char:FindFirstChildOfClass("Humanoid").WalkSpeed = val
-    end
-end)
-
-MovementSec:CreateButton("Emergency Stop", function()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-        Novier:Notify("Physics Engine", "Momentum reset.", 2, "Warning")
-    end
-end)
-
--- 3. Live Hacker Terminal & Automation Tab
-local TerminalTab = Window:CreateTab("SYS-CONSOLE", ">_")
-local TermSec = TerminalTab:CreateSection("Live Virtual Output")
-local Console = TermSec:CreateTerminal(160)
-
-TermSec:CreateButton("Test Traceback Log", function()
-    Console:Log("Inspecting local thread status...")
-    task.wait(0.2)
-    Console:Warn("Telemetry latency at standard thresholds.")
-    Novier:Notify("Kernel", "Telemetry test finished.", 3, "Success")
-end)
-
-TermSec:CreateButton("Flush Terminal Output", function()
-    Console:Clear()
-end)
-
--- 4. Environment & Visuals
-local EnvironmentTab = Window:CreateTab("VISUALS", "👁")
-local RenderSec = EnvironmentTab:CreateSection("Target Filtering")
-
-RenderSec:CreateDropdown("Target Filtering", {"Enemies", "Friendlies", "Neutral", "All Entities"}, "Enemies", function(selected)
-    Console:Log("Tracking filter updated: " .. selected)
-end)
-
-RenderSec:CreateTextbox("Filter Tag", "Enter tag name...", false, function(txt, enter)
-    if enter and #txt > 0 then
-        Console:Log("Custom tag appended: " .. txt)
-        Novier:Notify("Filter Pipeline", "Tag registered: " .. txt, 2, "Success")
-    end
-end)
-
-Novier:Notify("Novier Cyber", "Audio visualizer & matrix core online.", 4, "Success")
+return Novier
