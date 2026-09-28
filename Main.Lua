@@ -1,1771 +1,1956 @@
-```lua
 --[[
     Novier-HB
     Retro Roblox UI Library
+    ========================
 
-    Retro-styled GUI library with:
-    - Draggable window
-    - Minimize / close
-    - Tabs
-    - Sections
-    - Buttons
-    - Toggles
-    - Sliders
-    - Dropdowns
-    - Textboxes
-    - Keybinds
-    - Labels
-    - Notifications
-    - Themes
-    - UI toggle keybind
+    Loading this module does NOT create any UI.
+
+    Example:
+
+        local Novier = loadstring(game:HttpGet("YOUR_URL"))()
+
+        local Window = Novier:CreateWindow({
+            Title = "My Script",
+            Size = UDim2.fromOffset(700, 500),
+            Theme = "Retro"
+        })
+
+        local PlayerTab = Window:CreateTab("Player")
+
+        local Movement = PlayerTab:CreateSection("Movement")
+
+        Movement:CreateToggle({
+            Name = "Speed",
+            Default = false,
+            Callback = function(Value)
+                print("Speed:", Value)
+            end
+        })
 ]]
 
 local Novier = {}
 
---========================================================--
+Novier.Version = "1.0.0"
+
+----------------------------------------------------------------
 -- SERVICES
---========================================================--
+----------------------------------------------------------------
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 
-local LocalPlayer = Players.LocalPlayer
+----------------------------------------------------------------
+-- THEMES
+----------------------------------------------------------------
 
---========================================================--
--- CONFIG
---========================================================--
+Novier.Themes = {
 
-Novier.Version = "1.0.0"
+    Retro = {
+        Background = Color3.fromRGB(192, 192, 192),
+        Panel = Color3.fromRGB(212, 208, 200),
+        PanelDark = Color3.fromRGB(160, 160, 160),
 
-Novier.Theme = {
-    Window = Color3.fromRGB(35, 35, 35),
-    WindowLight = Color3.fromRGB(55, 55, 55),
+        TitleBar = Color3.fromRGB(0, 82, 160),
+        TitleBarInactive = Color3.fromRGB(128, 128, 128),
 
-    Title = Color3.fromRGB(35, 80, 135),
-    TitleLight = Color3.fromRGB(55, 105, 165),
+        Text = Color3.fromRGB(0, 0, 0),
+        TextLight = Color3.fromRGB(255, 255, 255),
 
-    Sidebar = Color3.fromRGB(45, 45, 45),
-    Content = Color3.fromRGB(38, 38, 38),
+        Button = Color3.fromRGB(212, 208, 200),
+        ButtonHover = Color3.fromRGB(230, 230, 230),
 
-    Control = Color3.fromRGB(55, 55, 55),
-    ControlHover = Color3.fromRGB(70, 70, 70),
+        Input = Color3.fromRGB(255, 255, 255),
 
-    Accent = Color3.fromRGB(75, 145, 220),
+        Accent = Color3.fromRGB(0, 82, 160),
+        AccentDark = Color3.fromRGB(0, 55, 110),
 
-    Text = Color3.fromRGB(235, 235, 235),
-    MutedText = Color3.fromRGB(175, 175, 175),
+        Tab = Color3.fromRGB(192, 192, 192),
+        TabActive = Color3.fromRGB(255, 255, 255),
 
-    BorderDark = Color3.fromRGB(15, 15, 15),
-    BorderLight = Color3.fromRGB(105, 105, 105),
+        Border = Color3.fromRGB(0, 0, 0),
+        Separator = Color3.fromRGB(128, 128, 128),
 
-    Success = Color3.fromRGB(80, 180, 100),
-    Warning = Color3.fromRGB(220, 170, 70),
-    Error = Color3.fromRGB(200, 75, 75)
+        Success = Color3.fromRGB(0, 128, 0),
+        Warning = Color3.fromRGB(180, 120, 0),
+        Error = Color3.fromRGB(180, 0, 0),
+    },
+
+    Classic = {
+        Background = Color3.fromRGB(25, 25, 25),
+        Panel = Color3.fromRGB(35, 35, 35),
+        PanelDark = Color3.fromRGB(20, 20, 20),
+
+        TitleBar = Color3.fromRGB(45, 45, 45),
+        TitleBarInactive = Color3.fromRGB(30, 30, 30),
+
+        Text = Color3.fromRGB(235, 235, 235),
+        TextLight = Color3.fromRGB(255, 255, 255),
+
+        Button = Color3.fromRGB(45, 45, 45),
+        ButtonHover = Color3.fromRGB(60, 60, 60),
+
+        Input = Color3.fromRGB(20, 20, 20),
+
+        Accent = Color3.fromRGB(0, 120, 255),
+        AccentDark = Color3.fromRGB(0, 80, 180),
+
+        Tab = Color3.fromRGB(35, 35, 35),
+        TabActive = Color3.fromRGB(55, 55, 55),
+
+        Border = Color3.fromRGB(0, 0, 0),
+        Separator = Color3.fromRGB(75, 75, 75),
+
+        Success = Color3.fromRGB(0, 200, 100),
+        Warning = Color3.fromRGB(255, 180, 0),
+        Error = Color3.fromRGB(255, 70, 70),
+    },
+
+    Terminal = {
+        Background = Color3.fromRGB(5, 10, 5),
+        Panel = Color3.fromRGB(10, 20, 10),
+        PanelDark = Color3.fromRGB(3, 8, 3),
+
+        TitleBar = Color3.fromRGB(0, 70, 0),
+        TitleBarInactive = Color3.fromRGB(0, 35, 0),
+
+        Text = Color3.fromRGB(0, 255, 80),
+        TextLight = Color3.fromRGB(150, 255, 170),
+
+        Button = Color3.fromRGB(10, 35, 10),
+        ButtonHover = Color3.fromRGB(15, 60, 15),
+
+        Input = Color3.fromRGB(0, 10, 0),
+
+        Accent = Color3.fromRGB(0, 255, 80),
+        AccentDark = Color3.fromRGB(0, 150, 40),
+
+        Tab = Color3.fromRGB(5, 20, 5),
+        TabActive = Color3.fromRGB(10, 40, 10),
+
+        Border = Color3.fromRGB(0, 255, 80),
+        Separator = Color3.fromRGB(0, 100, 30),
+
+        Success = Color3.fromRGB(0, 255, 80),
+        Warning = Color3.fromRGB(255, 200, 0),
+        Error = Color3.fromRGB(255, 60, 60),
+    }
 }
 
-Novier.Config = {
-    Width = 650,
-    Height = 450,
+----------------------------------------------------------------
+-- DEFAULTS
+----------------------------------------------------------------
 
-    MinWidth = 450,
-    MinHeight = 320,
+local DefaultConfig = {
+    Title = "Novier Window",
+    Size = UDim2.fromOffset(650, 450),
+    Position = nil,
+
+    Theme = "Retro",
+
+    ShowClose = true,
+    ShowMinimize = true,
+
+    Resizable = true,
+    Draggable = true,
+
+    TabsSide = "Left",
 
     Font = Enum.Font.Code,
 
-    AnimationTime = 0.12
+    ToggleKey = nil,
+
+    Parent = nil,
 }
 
---========================================================--
--- INTERNALS
---========================================================--
+----------------------------------------------------------------
+-- INTERNAL HELPERS
+----------------------------------------------------------------
 
-Novier._Gui = nil
-Novier._Window = nil
-Novier._Tabs = {}
-Novier._ActiveTab = nil
-Novier._Connections = {}
+local function Merge(defaults, custom)
 
---========================================================--
--- UTILITY
---========================================================--
+    local result = {}
 
-local function connect(signal, callback)
-    local connection = signal:Connect(callback)
-    table.insert(Novier._Connections, connection)
-    return connection
+    for key, value in pairs(defaults) do
+        result[key] = value
+    end
+
+    if custom then
+        for key, value in pairs(custom) do
+            result[key] = value
+        end
+    end
+
+    return result
 end
 
-local function tween(object, properties, duration)
-    local animation = TweenService:Create(
+local function New(className, properties)
+
+    local object = Instance.new(className)
+
+    for property, value in pairs(properties or {}) do
+        object[property] = value
+    end
+
+    return object
+end
+
+local function Corner(parent, radius)
+
+    local corner = New("UICorner", {
+        CornerRadius = UDim.new(0, radius or 0),
+        Parent = parent
+    })
+
+    return corner
+end
+
+local function Stroke(parent, color, thickness)
+
+    local stroke = New("UIStroke", {
+        Color = color or Color3.new(0, 0, 0),
+        Thickness = thickness or 1,
+        Parent = parent
+    })
+
+    return stroke
+end
+
+local function Tween(object, properties, duration)
+
+    return TweenService:Create(
         object,
         TweenInfo.new(
-            duration or Novier.Config.AnimationTime,
+            duration or 0.15,
             Enum.EasingStyle.Quad,
             Enum.EasingDirection.Out
         ),
         properties
     )
-
-    animation:Play()
-
-    return animation
 end
 
-local function corner(object, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 3)
-    c.Parent = object
-    return c
+local function AddConnection(container, connection)
+
+    container._connections = container._connections or {}
+
+    table.insert(container._connections, connection)
+
+    return connection
 end
 
-local function stroke(object, color, thickness)
-    local s = Instance.new("UIStroke")
-    s.Color = color or Novier.Theme.BorderDark
-    s.Thickness = thickness or 1
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = object
-    return s
+local function DisconnectAll(container)
+
+    if not container._connections then
+        return
+    end
+
+    for _, connection in ipairs(container._connections) do
+
+        pcall(function()
+            connection:Disconnect()
+        end)
+
+    end
+
+    table.clear(container._connections)
 end
 
-local function padding(object, top, bottom, left, right)
-    local p = Instance.new("UIPadding")
+----------------------------------------------------------------
+-- BASE CONTROL
+----------------------------------------------------------------
 
-    p.PaddingTop = UDim.new(0, top or 0)
-    p.PaddingBottom = UDim.new(0, bottom or 0)
-    p.PaddingLeft = UDim.new(0, left or 0)
-    p.PaddingRight = UDim.new(0, right or 0)
+local function CreateControlFrame(parent, height)
 
-    p.Parent = object
+    local frame = New("Frame", {
+        Size = UDim2.new(1, -12, 0, height),
+        BackgroundTransparency = 1,
+        Parent = parent
+    })
 
-    return p
+    return frame
 end
 
-local function label(parent, text, size, position)
-    local object = Instance.new("TextLabel")
+----------------------------------------------------------------
+-- SECTION
+----------------------------------------------------------------
 
-    object.BackgroundTransparency = 1
-    object.Size = size or UDim2.new(1, 0, 0, 20)
-    object.Position = position or UDim2.new()
-    object.Font = Novier.Config.Font
-    object.TextSize = 14
-    object.TextColor3 = Novier.Theme.Text
-    object.Text = text
-    object.TextXAlignment = Enum.TextXAlignment.Left
-    object.TextYAlignment = Enum.TextYAlignment.Center
+local SectionMethods = {}
 
-    object.Parent = parent
+function SectionMethods:_UpdateCanvas()
+
+    if self._content then
+        self._content.CanvasSize =
+            UDim2.fromOffset(0, self._layout.AbsoluteContentSize.Y + 10)
+    end
+end
+
+function SectionMethods:CreateLabel(text)
+
+    local label = New("TextLabel", {
+        Size = UDim2.new(1, -12, 0, 24),
+        BackgroundTransparency = 1,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = tostring(text),
+
+        Parent = self._content
+    })
+
+    return label
+end
+
+function SectionMethods:CreateDivider()
+
+    local divider = New("Frame", {
+        Size = UDim2.new(1, -12, 0, 1),
+
+        BackgroundColor3 = self.Theme.Separator,
+
+        BorderSizePixel = 0,
+
+        Parent = self._content
+    })
+
+    return divider
+end
+
+function SectionMethods:CreateParagraph(title, text)
+
+    local frame = CreateControlFrame(self._content, 70)
+
+    local titleLabel = New("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 22),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = title,
+
+        Parent = frame
+    })
+
+    local body = New("TextLabel", {
+        Position = UDim2.fromOffset(0, 22),
+        Size = UDim2.new(1, 0, 1, -22),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Window.Config.Font,
+        TextSize = 12,
+
+        TextColor3 = self.Theme.Text,
+
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+
+        Text = text,
+
+        Parent = frame
+    })
+
+    return frame
+end
+
+function SectionMethods:CreateButton(config)
+
+    config = config or {}
+
+    local name = config.Name or "Button"
+    local callback = config.Callback or function() end
+
+    local button = New("TextButton", {
+        Size = UDim2.new(1, -12, 0, 30),
+
+        BackgroundColor3 = self.Theme.Button,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        AutoButtonColor = false,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+
+        Text = name,
+
+        Parent = self._content
+    })
+
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = self.Theme.ButtonHover
+    end)
+
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = self.Theme.Button
+    end)
+
+    button.MouseButton1Click:Connect(function()
+
+        task.spawn(function()
+            callback()
+        end)
+
+    end)
+
+    return button
+end
+
+function SectionMethods:CreateToggle(config)
+
+    config = config or {}
+
+    local name = config.Name or "Toggle"
+    local state = config.Default == true
+    local callback = config.Callback or function() end
+
+    local button = New("TextButton", {
+        Size = UDim2.new(1, -12, 0, 30),
+
+        BackgroundColor3 = self.Theme.Button,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        AutoButtonColor = false,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Parent = self._content
+    })
+
+    local indicator = New("Frame", {
+        Position = UDim2.new(1, -25, 0.5, -7),
+
+        Size = UDim2.fromOffset(14, 14),
+
+        BackgroundColor3 = self.Theme.Panel,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Parent = button
+    })
+
+    local label = New("TextLabel", {
+        Position = UDim2.fromOffset(8, 0),
+
+        Size = UDim2.new(1, -40, 1, 0),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = name,
+
+        Parent = button
+    })
+
+    local function update()
+
+        if state then
+            indicator.BackgroundColor3 = self.Theme.Accent
+            label.Text = "☑ " .. name
+        else
+            indicator.BackgroundColor3 = self.Theme.Panel
+            label.Text = "☐ " .. name
+        end
+
+        task.spawn(function()
+            callback(state)
+        end)
+    end
+
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = self.Theme.ButtonHover
+    end)
+
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = self.Theme.Button
+    end)
+
+    button.MouseButton1Click:Connect(function()
+
+        state = not state
+
+        update()
+
+    end)
+
+    update()
+
+    local object = {}
+
+    function object:GetValue()
+        return state
+    end
+
+    function object:SetValue(value)
+
+        state = value == true
+
+        update()
+
+    end
+
+    function object:Destroy()
+        button:Destroy()
+    end
 
     return object
 end
 
-local function buttonStyle(button)
-    button.BackgroundColor3 = Novier.Theme.Control
-    button.AutoButtonColor = false
+function SectionMethods:CreateSlider(config)
 
-    stroke(button, Novier.Theme.BorderDark)
-end
+    config = config or {}
 
-local function hover(button)
-    connect(button.MouseEnter, function()
-        tween(button, {
-            BackgroundColor3 = Novier.Theme.ControlHover
-        })
-    end)
+    local name = config.Name or "Slider"
 
-    connect(button.MouseLeave, function()
-        tween(button, {
-            BackgroundColor3 = Novier.Theme.Control
-        })
-    end)
-end
+    local min = config.Min or 0
+    local max = config.Max or 100
 
---========================================================--
--- PARENT
---========================================================--
+    local value = config.Default or min
 
-local function getParent()
-    local success, core = pcall(function()
-        return game:GetService("CoreGui")
-    end)
+    local callback = config.Callback or function() end
 
-    if success and core then
-        return core
-    end
+    local frame = CreateControlFrame(self._content, 45)
 
-    return LocalPlayer:WaitForChild("PlayerGui")
-end
+    local label = New("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 20),
 
---========================================================--
--- DRAGGING
---========================================================--
+        BackgroundTransparency = 1,
 
-local function makeDraggable(window, handle)
-    local dragging = false
-    local dragStart
-    local startPosition
+        Font = self.Window.Config.Font,
+        TextSize = 13,
 
-    connect(handle.InputBegan, function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
+        TextColor3 = self.Theme.Text,
 
-        dragging = true
-        dragStart = input.Position
-        startPosition = window.Position
+        TextXAlignment = Enum.TextXAlignment.Left,
 
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end)
-
-    connect(UserInputService.InputChanged, function(input)
-        if not dragging then
-            return
-        end
-
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        local delta = input.Position - dragStart
-
-        window.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-    end)
-end
-
---========================================================--
--- NOTIFICATIONS
---========================================================--
-
-function Novier:Notify(title, message, duration, notificationType)
-    if not Novier._Gui then
-        return
-    end
-
-    duration = duration or 3
-
-    local holder = Novier._Gui:FindFirstChild("Notifications")
-
-    if not holder then
-        holder = Instance.new("Frame")
-        holder.Name = "Notifications"
-        holder.BackgroundTransparency = 1
-        holder.Size = UDim2.fromOffset(320, 400)
-        holder.Position = UDim2.new(1, -15, 1, -15)
-        holder.AnchorPoint = Vector2.new(1, 1)
-        holder.Parent = Novier._Gui
-
-        local layout = Instance.new("UIListLayout")
-        layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-        layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-        layout.Padding = UDim.new(0, 7)
-        layout.Parent = holder
-    end
-
-    local box = Instance.new("Frame")
-    box.Size = UDim2.fromOffset(300, 72)
-    box.BackgroundColor3 = Novier.Theme.Window
-    box.BorderSizePixel = 0
-    box.Parent = holder
-
-    stroke(box, Novier.Theme.BorderDark, 2)
-
-    local top = Instance.new("Frame")
-    top.Size = UDim2.new(1, 0, 0, 5)
-    top.BorderSizePixel = 0
-    top.BackgroundColor3 = Novier.Theme.Accent
-    top.Parent = box
-
-    if notificationType == "Success" then
-        top.BackgroundColor3 = Novier.Theme.Success
-    elseif notificationType == "Warning" then
-        top.BackgroundColor3 = Novier.Theme.Warning
-    elseif notificationType == "Error" then
-        top.BackgroundColor3 = Novier.Theme.Error
-    end
-
-    label(
-        box,
-        title,
-        UDim2.new(1, -20, 0, 22),
-        UDim2.fromOffset(10, 10)
-    )
-
-    local messageLabel = label(
-        box,
-        message,
-        UDim2.new(1, -20, 0, 30),
-        UDim2.fromOffset(10, 34)
-    )
-
-    messageLabel.TextColor3 = Novier.Theme.MutedText
-    messageLabel.TextWrapped = true
-
-    box.Position = UDim2.new(1, 320, 0, 0)
-
-    tween(box, {
-        Position = UDim2.new(0, 0, 0, 0)
+        Parent = frame
     })
 
-    task.delay(duration, function()
-        if not box.Parent then
+    local bar = New("Frame", {
+        Position = UDim2.fromOffset(0, 25),
+
+        Size = UDim2.new(1, 0, 0, 12),
+
+        BackgroundColor3 = self.Theme.Panel,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Parent = frame
+    })
+
+    local fill = New("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+
+        BackgroundColor3 = self.Theme.Accent,
+
+        BorderSizePixel = 0,
+
+        Parent = bar
+    })
+
+    local dragging = false
+
+    local function setValue(newValue, fire)
+
+        newValue = math.clamp(newValue, min, max)
+
+        value = newValue
+
+        local percent = (value - min) / (max - min)
+
+        fill.Size = UDim2.new(percent, 0, 1, 0)
+
+        label.Text = string.format(
+            "%s: %s",
+            name,
+            tostring(math.floor(value * 100) / 100)
+        )
+
+        if fire then
+            task.spawn(function()
+                callback(value)
+            end)
+        end
+    end
+
+    local function fromMouse(x)
+
+        local percent =
+            math.clamp(
+                (x - bar.AbsolutePosition.X) /
+                bar.AbsoluteSize.X,
+                0,
+                1
+            )
+
+        setValue(
+            min + ((max - min) * percent),
+            true
+        )
+    end
+
+    bar.InputBegan:Connect(function(input)
+
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+            dragging = true
+
+            fromMouse(input.Position.X)
+
+        end
+
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+
+        if dragging and
+            input.UserInputType == Enum.UserInputType.MouseMovement then
+
+            fromMouse(input.Position.X)
+
+        end
+
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+
+    end)
+
+    setValue(value, false)
+
+    local object = {}
+
+    function object:GetValue()
+        return value
+    end
+
+    function object:SetValue(newValue)
+        setValue(newValue, true)
+    end
+
+    function object:Destroy()
+        frame:Destroy()
+    end
+
+    return object
+end
+
+function SectionMethods:CreateTextbox(config)
+
+    config = config or {}
+
+    local name = config.Name or "Textbox"
+
+    local placeholder = config.Placeholder or ""
+
+    local default = config.Default or ""
+
+    local callback = config.Callback or function() end
+
+    local frame = CreateControlFrame(self._content, 55)
+
+    local label = New("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 20),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Window.Config.Font,
+        TextSize = 13,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = name,
+
+        Parent = frame
+    })
+
+    local box = New("TextBox", {
+        Position = UDim2.fromOffset(0, 22),
+
+        Size = UDim2.new(1, 0, 0, 28),
+
+        BackgroundColor3 = self.Theme.Input,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Font = self.Window.Config.Font,
+        TextSize = 13,
+
+        TextColor3 = self.Theme.Text,
+
+        PlaceholderColor3 = self.Theme.PanelDark,
+
+        PlaceholderText = placeholder,
+
+        Text = default,
+
+        ClearTextOnFocus = false,
+
+        Parent = frame
+    })
+
+    box.FocusLost:Connect(function(enterPressed)
+
+        task.spawn(function()
+            callback(box.Text, enterPressed)
+        end)
+
+    end)
+
+    local object = {}
+
+    function object:GetValue()
+        return box.Text
+    end
+
+    function object:SetValue(value)
+        box.Text = tostring(value)
+    end
+
+    function object:Destroy()
+        frame:Destroy()
+    end
+
+    return object
+end
+
+function SectionMethods:CreateDropdown(config)
+
+    config = config or {}
+
+    local name = config.Name or "Dropdown"
+
+    local options = config.Options or {}
+
+    local selected = config.Default
+
+    local callback = config.Callback or function() end
+
+    local frame = CreateControlFrame(self._content, 32)
+
+    local button = New("TextButton", {
+        Size = UDim2.new(1, 0, 1, 0),
+
+        BackgroundColor3 = self.Theme.Button,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Font = self.Window.Config.Font,
+        TextSize = 13,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        AutoButtonColor = false,
+
+        Parent = frame
+    })
+
+    local list
+
+    local function updateText()
+
+        if selected ~= nil then
+            button.Text = "  " .. name .. ": " .. tostring(selected)
+        else
+            button.Text = "  " .. name .. ": <none>"
+        end
+
+    end
+
+    local function close()
+
+        if list then
+            list:Destroy()
+            list = nil
+        end
+
+    end
+
+    local function open()
+
+        close()
+
+        list = New("Frame", {
+            Position = UDim2.new(
+                0,
+                0,
+                1,
+                2
+            ),
+
+            Size = UDim2.new(
+                1,
+                0,
+                0,
+                math.min(#options * 27, 160)
+            ),
+
+            BackgroundColor3 = self.Theme.Panel,
+
+            BorderSizePixel = 1,
+            BorderColor3 = self.Theme.Border,
+
+            ZIndex = 50,
+
+            Parent = frame
+        })
+
+        local layout = New("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Parent = list
+        })
+
+        for _, option in ipairs(options) do
+
+            local item = New("TextButton", {
+                Size = UDim2.new(1, 0, 0, 27),
+
+                BackgroundColor3 = self.Theme.Button,
+
+                BorderSizePixel = 1,
+                BorderColor3 = self.Theme.Border,
+
+                Font = self.Window.Config.Font,
+                TextSize = 13,
+
+                TextColor3 = self.Theme.Text,
+
+                Text = tostring(option),
+
+                ZIndex = 51,
+
+                Parent = list
+            })
+
+            item.MouseButton1Click:Connect(function()
+
+                selected = option
+
+                updateText()
+
+                close()
+
+                task.spawn(function()
+                    callback(selected)
+                end)
+
+            end)
+
+        end
+    end
+
+    button.MouseButton1Click:Connect(function()
+
+        if list then
+            close()
+        else
+            open()
+        end
+
+    end)
+
+    updateText()
+
+    local object = {}
+
+    function object:GetValue()
+        return selected
+    end
+
+    function object:SetValue(value)
+
+        selected = value
+
+        updateText()
+
+        task.spawn(function()
+            callback(selected)
+        end)
+
+    end
+
+    function object:SetOptions(newOptions)
+
+        options = newOptions or {}
+
+        close()
+
+    end
+
+    function object:Destroy()
+
+        close()
+        frame:Destroy()
+
+    end
+
+    return object
+end
+
+function SectionMethods:CreateKeybind(config)
+
+    config = config or {}
+
+    local name = config.Name or "Keybind"
+
+    local default = config.Default or Enum.KeyCode.RightShift
+
+    local callback = config.Callback or function() end
+
+    local current = default
+
+    local listening = false
+
+    local button = New("TextButton", {
+        Size = UDim2.new(1, -12, 0, 30),
+
+        BackgroundColor3 = self.Theme.Button,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Font = self.Window.Config.Font,
+        TextSize = 13,
+
+        TextColor3 = self.Theme.Text,
+
+        AutoButtonColor = false,
+
+        Parent = self._content
+    })
+
+    local function update()
+
+        button.Text =
+            name .. ": [" .. current.Name .. "]"
+
+    end
+
+    button.MouseButton1Click:Connect(function()
+
+        if listening then
             return
         end
 
-        tween(box, {
-            Position = UDim2.new(1, 320, 0, 0)
-        }, 0.2)
+        listening = true
 
-        task.wait(0.22)
+        button.Text = name .. ": [...]"
 
-        if box then
-            box:Destroy()
-        end
-    end)
-end
+        local connection
 
---========================================================--
--- WINDOW
---========================================================--
+        connection = UserInputService.InputBegan:Connect(function(input)
 
-function Novier:CreateWindow(title)
-    if Novier._Gui then
-        Novier:Destroy()
-    end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
 
-    local WindowObject = {}
+                current = input.KeyCode
 
-    --====================================================--
-    -- SCREEN GUI
-    --====================================================--
+                listening = false
 
-    local Gui = Instance.new("ScreenGui")
-    Gui.Name = "Novier-HB"
-    Gui.ResetOnSpawn = false
-    Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    Gui.Parent = getParent()
-
-    Novier._Gui = Gui
-
-    --====================================================--
-    -- SHADOW
-    --====================================================--
-
-    local Shadow = Instance.new("Frame")
-    Shadow.Name = "Shadow"
-
-    Shadow.Size = UDim2.fromOffset(
-        Novier.Config.Width + 8,
-        Novier.Config.Height + 8
-    )
-
-    Shadow.Position = UDim2.new(0.5, 4, 0.5, 5)
-    Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-
-    Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    Shadow.BackgroundTransparency = 0.45
-
-    Shadow.BorderSizePixel = 0
-    Shadow.Parent = Gui
-
-    corner(Shadow, 4)
-
-    --====================================================--
-    -- MAIN WINDOW
-    --====================================================--
-
-    local Main = Instance.new("Frame")
-    Main.Name = "Window"
-
-    Main.Size = UDim2.fromOffset(
-        Novier.Config.Width,
-        Novier.Config.Height
-    )
-
-    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Main.AnchorPoint = Vector2.new(0.5, 0.5)
-
-    Main.BackgroundColor3 = Novier.Theme.Window
-    Main.BorderSizePixel = 0
-
-    Main.ClipsDescendants = true
-    Main.Parent = Gui
-
-    stroke(Main, Novier.Theme.BorderDark, 2)
-
-    Novier._Window = Main
-
-    --====================================================--
-    -- TITLE BAR
-    --====================================================--
-
-    local TitleBar = Instance.new("Frame")
-    TitleBar.Name = "TitleBar"
-
-    TitleBar.Size = UDim2.new(1, 0, 0, 30)
-
-    TitleBar.BackgroundColor3 = Novier.Theme.Title
-    TitleBar.BorderSizePixel = 0
-    TitleBar.Parent = Main
-
-    -- Fake highlight line
-    local titleHighlight = Instance.new("Frame")
-    titleHighlight.Size = UDim2.new(1, 0, 0, 1)
-    titleHighlight.BackgroundColor3 = Novier.Theme.TitleLight
-    titleHighlight.BorderSizePixel = 0
-    titleHighlight.Parent = TitleBar
-
-    -- Icon
-    local Icon = label(
-        TitleBar,
-        "◆",
-        UDim2.fromOffset(24, 30),
-        UDim2.fromOffset(7, 0)
-    )
-
-    Icon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Icon.TextXAlignment = Enum.TextXAlignment.Center
-
-    -- Title
-    local Title = label(
-        TitleBar,
-        title or "Novier-HB",
-        UDim2.new(1, -115, 1, 0),
-        UDim2.fromOffset(34, 0)
-    )
-
-    Title.Font = Enum.Font.Code
-    Title.TextSize = 15
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-    --====================================================--
-    -- WINDOW BUTTONS
-    --====================================================--
-
-    local function createWindowButton(text, position)
-        local b = Instance.new("TextButton")
-
-        b.Size = UDim2.fromOffset(27, 22)
-        b.Position = position
-
-        b.BackgroundColor3 = Novier.Theme.Title
-        b.TextColor3 = Color3.fromRGB(255, 255, 255)
-
-        b.Text = text
-        b.TextSize = 14
-        b.Font = Enum.Font.Code
-
-        b.AutoButtonColor = false
-        b.BorderSizePixel = 0
-
-        b.Parent = TitleBar
-
-        stroke(b, Novier.Theme.BorderDark)
-
-        connect(b.MouseEnter, function()
-            tween(b, {
-                BackgroundColor3 = Novier.Theme.TitleLight
-            })
-        end)
-
-        connect(b.MouseLeave, function()
-            tween(b, {
-                BackgroundColor3 = Novier.Theme.Title
-            })
-        end)
-
-        return b
-    end
-
-    local Minimize =
-        createWindowButton("-", UDim2.new(1, -87, 0, 4))
-
-    local Maximize =
-        createWindowButton("□", UDim2.new(1, -58, 0, 4))
-
-    local Close =
-        createWindowButton("X", UDim2.new(1, -29, 0, 4))
-
-    --====================================================--
-    -- BODY
-    --====================================================--
-
-    local Body = Instance.new("Frame")
-
-    Body.Name = "Body"
-
-    Body.Size = UDim2.new(1, 0, 1, -30)
-    Body.Position = UDim2.fromOffset(0, 30)
-
-    Body.BackgroundColor3 = Novier.Theme.Content
-    Body.BorderSizePixel = 0
-
-    Body.Parent = Main
-
-    --====================================================--
-    -- SIDEBAR
-    --====================================================--
-
-    local Sidebar = Instance.new("Frame")
-
-    Sidebar.Name = "Sidebar"
-
-    Sidebar.Size = UDim2.new(0, 145, 1, 0)
-
-    Sidebar.BackgroundColor3 = Novier.Theme.Sidebar
-    Sidebar.BorderSizePixel = 0
-
-    Sidebar.Parent = Body
-
-    local SidebarBorder = Instance.new("Frame")
-
-    SidebarBorder.Size = UDim2.new(0, 1, 1, 0)
-    SidebarBorder.Position = UDim2.new(1, -1, 0, 0)
-
-    SidebarBorder.BackgroundColor3 = Novier.Theme.BorderDark
-    SidebarBorder.BorderSizePixel = 0
-    SidebarBorder.Parent = Sidebar
-
-    --====================================================--
-    -- BRAND
-    --====================================================--
-
-    local Brand = label(
-        Sidebar,
-        "NOVIER-HB",
-        UDim2.new(1, -20, 0, 35),
-        UDim2.fromOffset(10, 8)
-    )
-
-    Brand.Font = Enum.Font.Code
-    Brand.TextSize = 16
-    Brand.TextColor3 = Novier.Theme.Accent
-
-    local Version = label(
-        Sidebar,
-        "RETRO INTERFACE v" .. Novier.Version,
-        UDim2.new(1, -20, 0, 18),
-        UDim2.fromOffset(10, 35)
-    )
-
-    Version.TextSize = 10
-    Version.TextColor3 = Novier.Theme.MutedText
-
-    --====================================================--
-    -- TAB CONTAINER
-    --====================================================--
-
-    local TabContainer = Instance.new("ScrollingFrame")
-
-    TabContainer.Name = "Tabs"
-
-    TabContainer.Size = UDim2.new(1, -10, 1, -75)
-    TabContainer.Position = UDim2.fromOffset(5, 70)
-
-    TabContainer.BackgroundTransparency = 1
-    TabContainer.BorderSizePixel = 0
-
-    TabContainer.ScrollBarThickness = 2
-    TabContainer.ScrollBarImageColor3 = Novier.Theme.Accent
-
-    TabContainer.CanvasSize = UDim2.new()
-
-    TabContainer.Parent = Sidebar
-
-    local TabLayout = Instance.new("UIListLayout")
-
-    TabLayout.Padding = UDim.new(0, 4)
-    TabLayout.Parent = TabContainer
-
-    connect(TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-        TabContainer.CanvasSize = UDim2.fromOffset(
-            0,
-            TabLayout.AbsoluteContentSize.Y + 5
-        )
-    end)
-
-    --====================================================--
-    -- CONTENT
-    --====================================================--
-
-    local Content = Instance.new("Frame")
-
-    Content.Name = "Content"
-
-    Content.Size = UDim2.new(1, -145, 1, 0)
-    Content.Position = UDim2.fromOffset(145, 0)
-
-    Content.BackgroundColor3 = Novier.Theme.Content
-    Content.BorderSizePixel = 0
-
-    Content.Parent = Body
-
-    --====================================================--
-    -- TAB CREATION
-    --====================================================--
-
-    function WindowObject:CreateTab(tabName, icon)
-        local Tab = {}
-
-        local TabButton = Instance.new("TextButton")
-
-        TabButton.Name = tabName
-        TabButton.Size = UDim2.new(1, 0, 0, 34)
-
-        TabButton.BackgroundColor3 = Novier.Theme.Sidebar
-
-        TabButton.Text = ""
-        TabButton.AutoButtonColor = false
-
-        TabButton.Parent = TabContainer
-
-        stroke(TabButton, Novier.Theme.BorderDark)
-
-        -- tiny retro icon
-        local TabIcon = label(
-            TabButton,
-            icon or "■",
-            UDim2.fromOffset(27, 34),
-            UDim2.fromOffset(4, 0)
-        )
-
-        TabIcon.TextSize = 11
-        TabIcon.TextXAlignment = Enum.TextXAlignment.Center
-        TabIcon.TextColor3 = Novier.Theme.MutedText
-
-        local TabText = label(
-            TabButton,
-            tabName,
-            UDim2.new(1, -35, 1, 0),
-            UDim2.fromOffset(34, 0)
-        )
-
-        TabText.TextSize = 13
-        TabText.TextColor3 = Novier.Theme.MutedText
-
-        --================================================//
-        -- PAGE
-        --================================================//
-
-        local Page = Instance.new("ScrollingFrame")
-
-        Page.Name = tabName .. "_Page"
-
-        Page.Size = UDim2.new(1, 0, 1, 0)
-
-        Page.BackgroundTransparency = 1
-        Page.BorderSizePixel = 0
-
-        Page.ScrollBarThickness = 3
-        Page.ScrollBarImageColor3 = Novier.Theme.Accent
-
-        Page.CanvasSize = UDim2.new()
-
-        Page.Visible = false
-        Page.Parent = Content
-
-        padding(Page, 12, 12, 12, 12)
-
-        local PageLayout = Instance.new("UIListLayout")
-
-        PageLayout.Padding = UDim.new(0, 10)
-        PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-        PageLayout.Parent = Page
-
-        connect(PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-            Page.CanvasSize = UDim2.fromOffset(
-                0,
-                PageLayout.AbsoluteContentSize.Y + 25
-            )
-        end)
-
-        --================================================//
-        -- SECTION
-        --================================================//
-
-        function Tab:CreateSection(sectionName)
-            local Section = {}
-
-            local Frame = Instance.new("Frame")
-
-            Frame.Name = sectionName
-
-            Frame.Size = UDim2.new(1, 0, 0, 0)
-
-            Frame.AutomaticSize = Enum.AutomaticSize.Y
-
-            Frame.BackgroundColor3 = Novier.Theme.Window
-
-            Frame.BorderSizePixel = 0
-
-            Frame.Parent = Page
-
-            stroke(Frame, Novier.Theme.BorderDark, 2)
-
-            -- Section header
-            local Header = Instance.new("Frame")
-
-            Header.Size = UDim2.new(1, 0, 0, 28)
-
-            Header.BackgroundColor3 = Novier.Theme.WindowLight
-
-            Header.BorderSizePixel = 0
-
-            Header.Parent = Frame
-
-            local HeaderText = label(
-                Header,
-                "[ " .. sectionName:upper() .. " ]",
-                UDim2.new(1, -16, 1, 0),
-                UDim2.fromOffset(8, 0)
-            )
-
-            HeaderText.TextSize = 13
-            HeaderText.Font = Enum.Font.Code
-            HeaderText.TextColor3 = Novier.Theme.Accent
-
-            -- Section contents
-            local Container = Instance.new("Frame")
-
-            Container.Name = "Controls"
-
-            Container.Size = UDim2.new(1, -16, 0, 0)
-
-            Container.Position = UDim2.fromOffset(8, 35)
-
-            Container.AutomaticSize = Enum.AutomaticSize.Y
-
-            Container.BackgroundTransparency = 1
-
-            Container.Parent = Frame
-
-            padding(Container, 0, 8, 0, 0)
-
-            local Layout = Instance.new("UIListLayout")
-
-            Layout.Padding = UDim.new(0, 6)
-
-            Layout.Parent = Container
-
-            --================================================//
-            -- BUTTON
-            --================================================//
-
-            function Section:CreateButton(text, callback)
-                local Button = Instance.new("TextButton")
-
-                Button.Size = UDim2.new(1, 0, 0, 34)
-
-                Button.BackgroundColor3 = Novier.Theme.Control
-
-                Button.Text = text
-
-                Button.TextColor3 = Novier.Theme.Text
-
-                Button.TextSize = 13
-                Button.Font = Novier.Config.Font
-
-                Button.AutoButtonColor = false
-
-                Button.Parent = Container
-
-                stroke(Button, Novier.Theme.BorderDark)
-
-                hover(Button)
-
-                connect(Button.MouseButton1Click, function()
-                    tween(Button, {
-                        BackgroundColor3 = Novier.Theme.Accent
-                    }, 0.05)
-
-                    task.delay(0.06, function()
-                        if Button.Parent then
-                            tween(Button, {
-                                BackgroundColor3 = Novier.Theme.Control
-                            }, 0.08)
-                        end
-                    end)
-
-                    if callback then
-                        callback()
-                    end
-                end)
-
-                return Button
-            end
-
-            --================================================//
-            -- TOGGLE
-            --================================================//
-
-            function Section:CreateToggle(text, default, callback)
-                local state = default == true
-
-                local Button = Instance.new("TextButton")
-
-                Button.Size = UDim2.new(1, 0, 0, 34)
-
-                Button.BackgroundColor3 = Novier.Theme.Control
-
-                Button.Text = ""
-                Button.AutoButtonColor = false
-
-                Button.Parent = Container
-
-                stroke(Button, Novier.Theme.BorderDark)
-
-                local Text = label(
-                    Button,
-                    text,
-                    UDim2.new(1, -65, 1, 0),
-                    UDim2.fromOffset(9, 0)
-                )
-
-                Text.TextSize = 13
-
-                local Check = Instance.new("Frame")
-
-                Check.Size = UDim2.fromOffset(42, 20)
-
-                Check.Position = UDim2.new(1, -51, 0.5, -10)
-
-                Check.BackgroundColor3 = Novier.Theme.BorderDark
-
-                Check.Parent = Button
-
-                stroke(Check, Novier.Theme.BorderLight)
-
-                local CheckText = label(
-                    Check,
-                    "",
-                    UDim2.new(1, 0, 1, 0)
-                )
-
-                CheckText.TextSize = 11
-                CheckText.TextXAlignment = Enum.TextXAlignment.Center
-
-                local function update()
-                    if state then
-                        Check.BackgroundColor3 = Novier.Theme.Accent
-                        CheckText.Text = "ON"
-                    else
-                        Check.BackgroundColor3 = Novier.Theme.BorderDark
-                        CheckText.Text = "OFF"
-                    end
-
-                    if callback then
-                        callback(state)
-                    end
-                end
-
-                connect(Button.MouseButton1Click, function()
-                    state = not state
-                    update()
-                end)
+                connection:Disconnect()
 
                 update()
 
-                return {
-                    Set = function(_, value)
-                        state = value == true
-                        update()
-                    end,
-
-                    Get = function()
-                        return state
-                    end
-                }
-            end
-
-            --================================================//
-            -- SLIDER
-            --================================================//
-
-            function Section:CreateSlider(text, minimum, maximum, default, callback)
-                minimum = minimum or 0
-                maximum = maximum or 100
-
-                local value = math.clamp(
-                    default or minimum,
-                    minimum,
-                    maximum
-                )
-
-                local Frame = Instance.new("Frame")
-
-                Frame.Size = UDim2.new(1, 0, 0, 52)
-
-                Frame.BackgroundColor3 = Novier.Theme.Control
-
-                Frame.Parent = Container
-
-                stroke(Frame, Novier.Theme.BorderDark)
-
-                local Text = label(
-                    Frame,
-                    text,
-                    UDim2.new(0.6, 0, 0, 22),
-                    UDim2.fromOffset(9, 3)
-                )
-
-                Text.TextSize = 13
-
-                local ValueText = label(
-                    Frame,
-                    tostring(value),
-                    UDim2.new(0.4, -10, 0, 22),
-                    UDim2.new(0.6, 0, 0, 3)
-                )
-
-                ValueText.TextXAlignment = Enum.TextXAlignment.Right
-                ValueText.TextColor3 = Novier.Theme.MutedText
-
-                local Bar = Instance.new("Frame")
-
-                Bar.Size = UDim2.new(1, -18, 0, 7)
-
-                Bar.Position = UDim2.fromOffset(9, 36)
-
-                Bar.BackgroundColor3 = Novier.Theme.BorderDark
-
-                Bar.Parent = Frame
-
-                stroke(Bar, Novier.Theme.BorderLight)
-
-                local Fill = Instance.new("Frame")
-
-                Fill.BackgroundColor3 = Novier.Theme.Accent
-
-                Fill.BorderSizePixel = 0
-
-                Fill.Parent = Bar
-
-                local function updateFromX(x)
-                    local percentage = math.clamp(
-                        (x - Bar.AbsolutePosition.X) /
-                        Bar.AbsoluteSize.X,
-                        0,
-                        1
-                    )
-
-                    value =
-                        minimum +
-                        ((maximum - minimum) * percentage)
-
-                    if math.floor(value) == value then
-                        value = math.floor(value)
-                    else
-                        value = math.floor(value * 100) / 100
-                    end
-
-                    Fill.Size = UDim2.new(
-                        percentage,
-                        0,
-                        1,
-                        0
-                    )
-
-                    ValueText.Text = tostring(value)
-
-                    if callback then
-                        callback(value)
-                    end
-                end
-
-                Fill.Size = UDim2.new(
-                    (value - minimum) /
-                    (maximum - minimum),
-                    0,
-                    1,
-                    0
-                )
-
-                local dragging = false
-
-                connect(Bar.InputBegan, function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragging = true
-                        updateFromX(input.Position.X)
-                    end
+                task.spawn(function()
+                    callback(current)
                 end)
 
-                connect(UserInputService.InputChanged, function(input)
-                    if dragging and
-                        input.UserInputType == Enum.UserInputType.MouseMovement then
-
-                        updateFromX(input.Position.X)
-                    end
-                end)
-
-                connect(UserInputService.InputEnded, function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        dragging = false
-                    end
-                end)
-
-                return {
-                    Set = function(_, newValue)
-                        value = math.clamp(
-                            newValue,
-                            minimum,
-                            maximum
-                        )
-
-                        local percentage =
-                            (value - minimum) /
-                            (maximum - minimum)
-
-                        Fill.Size = UDim2.new(
-                            percentage,
-                            0,
-                            1,
-                            0
-                        )
-
-                        ValueText.Text = tostring(value)
-
-                        if callback then
-                            callback(value)
-                        end
-                    end,
-
-                    Get = function()
-                        return value
-                    end
-                }
             end
 
-            --================================================//
-            -- DROPDOWN
-            --================================================//
-
-            function Section:CreateDropdown(text, options, default, callback)
-                local selected = default or options[1]
-                local opened = false
-
-                local Frame = Instance.new("Frame")
-
-                Frame.Size = UDim2.new(1, 0, 0, 34)
-
-                Frame.BackgroundColor3 = Novier.Theme.Control
-
-                Frame.ClipsDescendants = true
-
-                Frame.Parent = Container
-
-                stroke(Frame, Novier.Theme.BorderDark)
-
-                local MainButton = Instance.new("TextButton")
-
-                MainButton.Size = UDim2.new(1, 0, 0, 34)
-
-                MainButton.BackgroundTransparency = 1
-
-                MainButton.Text = ""
-
-                MainButton.Parent = Frame
-
-                local Text = label(
-                    MainButton,
-                    text,
-                    UDim2.new(0.55, 0, 1, 0),
-                    UDim2.fromOffset(9, 0)
-                )
-
-                Text.TextSize = 13
-
-                local Selected = label(
-                    MainButton,
-                    tostring(selected),
-                    UDim2.new(0.45, -25, 1, 0),
-                    UDim2.new(0.55, 0, 0, 0)
-                )
-
-                Selected.TextXAlignment = Enum.TextXAlignment.Right
-                Selected.TextColor3 = Novier.Theme.MutedText
-
-                local Arrow = label(
-                    MainButton,
-                    "▼",
-                    UDim2.fromOffset(20, 34),
-                    UDim2.new(1, -25, 0, 0)
-                )
-
-                Arrow.TextXAlignment = Enum.TextXAlignment.Center
-                Arrow.TextColor3 = Novier.Theme.MutedText
-
-                local OptionsFrame = Instance.new("Frame")
-
-                OptionsFrame.Size = UDim2.new(1, -16, 0, #options * 29)
-
-                OptionsFrame.Position = UDim2.fromOffset(8, 39)
-
-                OptionsFrame.BackgroundTransparency = 1
-
-                OptionsFrame.Parent = Frame
-
-                local OptionLayout = Instance.new("UIListLayout")
-
-                OptionLayout.Padding = UDim.new(0, 3)
-
-                OptionLayout.Parent = OptionsFrame
-
-                for _, option in ipairs(options) do
-                    local Option = Instance.new("TextButton")
-
-                    Option.Size = UDim2.new(1, 0, 0, 26)
-
-                    Option.BackgroundColor3 = Novier.Theme.WindowLight
-
-                    Option.Text = tostring(option)
-
-                    Option.TextColor3 = Novier.Theme.Text
-
-                    Option.TextSize = 12
-                    Option.Font = Novier.Config.Font
-
-                    Option.AutoButtonColor = false
-
-                    Option.Parent = OptionsFrame
-
-                    stroke(Option, Novier.Theme.BorderDark)
-
-                    connect(Option.MouseEnter, function()
-                        tween(Option, {
-                            BackgroundColor3 = Novier.Theme.Accent
-                        })
-                    end)
-
-                    connect(Option.MouseLeave, function()
-                        tween(Option, {
-                            BackgroundColor3 = Novier.Theme.WindowLight
-                        })
-                    end)
-
-                    connect(Option.MouseButton1Click, function()
-                        selected = option
-
-                        Selected.Text = tostring(option)
-
-                        opened = false
-
-                        Frame.Size =
-                            UDim2.new(1, 0, 0, 34)
-
-                        Arrow.Text = "▼"
-
-                        if callback then
-                            callback(option)
-                        end
-                    end)
-                end
-
-                connect(MainButton.MouseButton1Click, function()
-                    opened = not opened
-
-                    if opened then
-                        Frame.Size = UDim2.new(
-                            1,
-                            0,
-                            0,
-                            44 + (#options * 29)
-                        )
-
-                        Arrow.Text = "▲"
-                    else
-                        Frame.Size =
-                            UDim2.new(1, 0, 0, 34)
-
-                        Arrow.Text = "▼"
-                    end
-                end)
-
-                return {
-                    Set = function(_, value)
-                        if table.find(options, value) then
-                            selected = value
-                            Selected.Text = tostring(value)
-
-                            if callback then
-                                callback(value)
-                            end
-                        end
-                    end,
-
-                    Get = function()
-                        return selected
-                    end
-                }
-            end
-
-            --================================================//
-            -- TEXTBOX
-            --================================================//
-
-            function Section:CreateTextbox(text, placeholder, callback)
-                local Frame = Instance.new("Frame")
-
-                Frame.Size = UDim2.new(1, 0, 0, 58)
-
-                Frame.BackgroundColor3 = Novier.Theme.Control
-
-                Frame.Parent = Container
-
-                stroke(Frame, Novier.Theme.BorderDark)
-
-                label(
-                    Frame,
-                    text,
-                    UDim2.new(1, -18, 0, 20),
-                    UDim2.fromOffset(9, 2)
-                )
-
-                local Box = Instance.new("TextBox")
-
-                Box.Size = UDim2.new(1, -18, 0, 27)
-
-                Box.Position = UDim2.fromOffset(9, 26)
-
-                Box.BackgroundColor3 = Novier.Theme.Window
-
-                Box.TextColor3 = Novier.Theme.Text
-
-                Box.PlaceholderColor3 = Novier.Theme.MutedText
-
-                Box.PlaceholderText = placeholder or ""
-
-                Box.Text = ""
-
-                Box.TextSize = 12
-
-                Box.Font = Novier.Config.Font
-
-                Box.ClearTextOnFocus = false
-
-                Box.Parent = Frame
-
-                stroke(Box, Novier.Theme.BorderDark)
-
-                padding(Box, 0, 0, 7, 7)
-
-                connect(Box.FocusLost, function()
-                    if callback then
-                        callback(Box.Text)
-                    end
-                end)
-
-                return Box
-            end
-
-            --================================================//
-            -- KEYBIND
-            --================================================//
-
-            function Section:CreateKeybind(text, default, callback)
-                local currentKey =
-                    default or Enum.KeyCode.RightShift
-
-                local listening = false
-
-                local Button = Instance.new("TextButton")
-
-                Button.Size = UDim2.new(1, 0, 0, 34)
-
-                Button.BackgroundColor3 = Novier.Theme.Control
-
-                Button.Text = ""
-
-                Button.AutoButtonColor = false
-
-                Button.Parent = Container
-
-                stroke(Button, Novier.Theme.BorderDark)
-
-                label(
-                    Button,
-                    text,
-                    UDim2.new(0.65, 0, 1, 0),
-                    UDim2.fromOffset(9, 0)
-                )
-
-                local Key = label(
-                    Button,
-                    currentKey.Name,
-                    UDim2.new(0.35, -10, 1, 0),
-                    UDim2.new(0.65, 0, 0, 0)
-                )
-
-                Key.TextXAlignment = Enum.TextXAlignment.Right
-                Key.TextColor3 = Novier.Theme.Accent
-
-                connect(Button.MouseButton1Click, function()
-                    listening = true
-                    Key.Text = "PRESS KEY"
-                end)
-
-                connect(UserInputService.InputBegan, function(input)
-                    if not listening then
-                        return
-                    end
-
-                    if input.UserInputType ~= Enum.UserInputType.Keyboard then
-                        return
-                    end
-
-                    currentKey = input.KeyCode
-
-                    Key.Text = currentKey.Name
-
-                    listening = false
-                end)
-
-                connect(UserInputService.InputBegan, function(input, processed)
-                    if processed or listening then
-                        return
-                    end
-
-                    if input.KeyCode == currentKey then
-                        if callback then
-                            callback()
-                        end
-                    end
-                end)
-
-                return {
-                    Set = function(_, newKey)
-                        currentKey = newKey
-                        Key.Text = newKey.Name
-                    end,
-
-                    Get = function()
-                        return currentKey
-                    end
-                }
-            end
-
-            --================================================//
-            -- LABEL
-            --================================================//
-
-            function Section:CreateLabel(text)
-                local Text = label(
-                    Container,
-                    text,
-                    UDim2.new(1, 0, 0, 25)
-                )
-
-                Text.TextColor3 = Novier.Theme.MutedText
-                Text.TextSize = 12
-                Text.TextWrapped = true
-
-                return Text
-            end
-
-            --================================================//
-            -- DIVIDER
-            --================================================//
-
-            function Section:CreateDivider()
-                local Divider = Instance.new("Frame")
-
-                Divider.Size = UDim2.new(1, 0, 0, 1)
-
-                Divider.BackgroundColor3 =
-                    Novier.Theme.BorderDark
-
-                Divider.BorderSizePixel = 0
-
-                Divider.Parent = Container
-
-                return Divider
-            end
-
-            return Section
-        end
-
-        --================================================//
-        -- TAB SELECT
-        --================================================//
-
-        connect(TabButton.MouseButton1Click, function()
-            for _, existing in pairs(Novier._Tabs) do
-                existing.Page.Visible = false
-
-                existing.Button.BackgroundColor3 =
-                    Novier.Theme.Sidebar
-
-                existing.Text.TextColor3 =
-                    Novier.Theme.MutedText
-
-                existing.Icon.TextColor3 =
-                    Novier.Theme.MutedText
-            end
-
-            Page.Visible = true
-
-            TabButton.BackgroundColor3 =
-                Novier.Theme.Control
-
-            TabText.TextColor3 =
-                Novier.Theme.Text
-
-            TabIcon.TextColor3 =
-                Novier.Theme.Accent
-
-            Novier._ActiveTab = Tab
         end)
 
-        Tab.Button = TabButton
-        Tab.Page = Page
-        Tab.Text = TabText
-        Tab.Icon = TabIcon
+    end)
 
-        Novier._Tabs[tabName] = Tab
+    update()
 
-        if not Novier._ActiveTab then
-            Page.Visible = true
+    local object = {}
 
-            TabButton.BackgroundColor3 =
-                Novier.Theme.Control
-
-            TabText.TextColor3 =
-                Novier.Theme.Text
-
-            TabIcon.TextColor3 =
-                Novier.Theme.Accent
-
-            Novier._ActiveTab = Tab
-        end
-
-        return Tab
+    function object:GetValue()
+        return current
     end
 
-    --====================================================--
-    -- MINIMIZE
-    --====================================================--
+    function object:SetValue(key)
+        current = key
+        update()
+    end
 
-    local minimized = false
-    local maximized = false
+    function object:Destroy()
+        button:Destroy()
+    end
 
-    local normalSize = UDim2.fromOffset(
-        Novier.Config.Width,
-        Novier.Config.Height
-    )
+    return object
+end
 
-    local normalPosition = Main.Position
+----------------------------------------------------------------
+-- TAB
+----------------------------------------------------------------
 
-    connect(Minimize.MouseButton1Click, function()
-        minimized = not minimized
+local TabMethods = {}
 
-        if minimized then
-            Body.Visible = false
+function TabMethods:CreateSection(name)
 
-            tween(Main, {
-                Size = UDim2.fromOffset(
-                    Novier.Config.Width,
-                    30
-                )
-            })
+    local section = setmetatable({
+        Window = self.Window,
+        Tab = self,
+        Theme = self.Window.Theme,
 
-            tween(Shadow, {
-                Size = UDim2.fromOffset(
-                    Novier.Config.Width + 8,
-                    38
-                )
-            })
-        else
-            Body.Visible = true
+        Name = name,
 
-            tween(Main, {
-                Size = normalSize
-            })
+    }, {
+        __index = SectionMethods
+    })
 
-            tween(Shadow, {
-                Size = UDim2.fromOffset(
-                    normalSize.X.Offset + 8,
-                    normalSize.Y.Offset + 8
-                )
-            })
+    local header = New("TextLabel", {
+        Size = UDim2.new(1, -12, 0, 28),
+
+        BackgroundColor3 = self.Window.Theme.PanelDark,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Window.Theme.Border,
+
+        Font = self.Window.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Window.Theme.TextLight,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = "  " .. tostring(name),
+
+        Parent = self._content
+    })
+
+    local content = New("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 0, 0),
+
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+
+        BackgroundTransparency = 1,
+
+        BorderSizePixel = 0,
+
+        ScrollBarThickness = 5,
+
+        ScrollBarImageColor3 = self.Window.Theme.Accent,
+
+        CanvasSize = UDim2.new(),
+
+        Parent = self._content
+    })
+
+    local padding = New("UIPadding", {
+        PaddingTop = UDim.new(0, 5),
+        PaddingBottom = UDim.new(0, 5),
+        PaddingLeft = UDim.new(0, 5),
+        PaddingRight = UDim.new(0, 5),
+
+        Parent = content
+    })
+
+    local layout = New("UIListLayout", {
+        Padding = UDim.new(0, 5),
+
+        SortOrder = Enum.SortOrder.LayoutOrder,
+
+        Parent = content
+    })
+
+    section._header = header
+    section._content = content
+    section._layout = layout
+
+    table.insert(self.Sections, section)
+
+    return section
+end
+
+----------------------------------------------------------------
+-- WINDOW
+----------------------------------------------------------------
+
+local WindowMethods = {}
+
+function WindowMethods:SetVisible(value)
+
+    self.Visible = value == true
+
+    self.Gui.Enabled = self.Visible
+
+end
+
+function WindowMethods:IsVisible()
+
+    return self.Visible
+
+end
+
+function WindowMethods:SetTitle(title)
+
+    self.Config.Title = tostring(title)
+
+    self._title.Text = self.Config.Title
+
+end
+
+function WindowMethods:SelectTab(tab)
+
+    if type(tab) == "string" then
+
+        for _, existing in ipairs(self.Tabs) do
+
+            if existing.Name == tab then
+                tab = existing
+                break
+            end
+
         end
+
+    end
+
+    if not tab then
+        return
+    end
+
+    for _, existing in ipairs(self.Tabs) do
+
+        local active = existing == tab
+
+        existing._page.Visible = active
+
+        if active then
+
+            existing._button.BackgroundColor3 =
+                self.Theme.TabActive
+
+            existing._button.TextColor3 =
+                self.Theme.Text
+
+        else
+
+            existing._button.BackgroundColor3 =
+                self.Theme.Tab
+
+            existing._button.TextColor3 =
+                self.Theme.Text
+
+        end
+
+    end
+
+    self.SelectedTab = tab
+
+end
+
+function WindowMethods:Notify(config)
+
+    config = config or {}
+
+    local title = config.Title or "Notification"
+    local text = config.Text or ""
+
+    local duration = config.Duration or 3
+
+    local holder = self._notificationHolder
+
+    local notification = New("Frame", {
+        Size = UDim2.fromOffset(300, 80),
+
+        BackgroundColor3 = self.Theme.Panel,
+
+        BorderSizePixel = 1,
+        BorderColor3 = self.Theme.Border,
+
+        Parent = holder
+    })
+
+    local titleLabel = New("TextLabel", {
+        Size = UDim2.new(1, -10, 0, 25),
+
+        Position = UDim2.fromOffset(5, 3),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Config.Font,
+        TextSize = 14,
+
+        TextColor3 = self.Theme.Text,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = title,
+
+        Parent = notification
+    })
+
+    local body = New("TextLabel", {
+        Position = UDim2.fromOffset(5, 28),
+
+        Size = UDim2.new(1, -10, 1, -32),
+
+        BackgroundTransparency = 1,
+
+        Font = self.Config.Font,
+        TextSize = 12,
+
+        TextColor3 = self.Theme.Text,
+
+        TextWrapped = true,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+
+        Text = text,
+
+        Parent = notification
+    })
+
+    task.delay(duration, function()
+
+        if notification and notification.Parent then
+
+            Tween(
+                notification,
+                {
+                    BackgroundTransparency = 1
+                },
+                0.2
+            ):Play()
+
+            task.wait(0.2)
+
+            notification:Destroy()
+
+        end
+
     end)
 
-    --====================================================--
-    -- MAXIMIZE
-    --====================================================--
+    return notification
+end
 
-    connect(Maximize.MouseButton1Click, function()
-        if minimized then
-            return
+function WindowMethods:SetTheme(theme)
+
+    local selected
+
+    if type(theme) == "string" then
+        selected = Novier.Themes[theme]
+    elseif type(theme) == "table" then
+        selected = theme
+    end
+
+    if not selected then
+        return
+    end
+
+    self.Theme = selected
+
+    -- Rebuilding is intentionally avoided here.
+    -- Existing controls can still be manually themed.
+end
+
+function WindowMethods:CreateTab(name, icon)
+
+    local tab = setmetatable({
+
+        Window = self,
+
+        Name = name,
+
+        Icon = icon,
+
+        Sections = {},
+
+    }, {
+        __index = TabMethods
+    })
+
+    local buttonText = tostring(name)
+
+    if icon then
+        buttonText = tostring(icon) .. "  " .. buttonText
+    end
+
+    local button = New("TextButton", {
+        Size = UDim2.new(1, -4, 0, 32),
+
+        BackgroundColor3 = self.Theme.Tab,
+
+        BorderSizePixel = 1,
+
+        BorderColor3 = self.Theme.Border,
+
+        AutoButtonColor = false,
+
+        Font = self.Config.Font,
+        TextSize = 13,
+
+        TextColor3 = self.Theme.Text,
+
+        Text = buttonText,
+
+        Parent = self._tabList
+    })
+
+    local page = New("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 1, 0),
+
+        BackgroundTransparency = 1,
+
+        BorderSizePixel = 0,
+
+        ScrollBarThickness = 7,
+
+        ScrollBarImageColor3 = self.Theme.Accent,
+
+        CanvasSize = UDim2.new(),
+
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+
+        Visible = false,
+
+        Parent = self._pages
+    })
+
+    local padding = New("UIPadding", {
+        PaddingTop = UDim.new(0, 8),
+        PaddingBottom = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+
+        Parent = page
+    })
+
+    local layout = New("UIListLayout", {
+        Padding = UDim.new(0, 8),
+
+        SortOrder = Enum.SortOrder.LayoutOrder,
+
+        Parent = page
+    })
+
+    tab._button = button
+    tab._page = page
+    tab._content = page
+
+    table.insert(self.Tabs, tab)
+
+    button.MouseEnter:Connect(function()
+
+        if self.SelectedTab ~= tab then
+            button.BackgroundColor3 = self.Theme.ButtonHover
         end
 
-        maximized = not maximized
-
-        if maximized then
-            normalSize = Main.Size
-            normalPosition = Main.Position
-
-            tween(Main, {
-                Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.new(1, -30, 1, -30)
-            })
-
-            Maximize.Text = "❐"
-        else
-            tween(Main, {
-                Position = normalPosition,
-                Size = normalSize
-            })
-
-            Maximize.Text = "□"
-        end
     end)
 
-    --====================================================--
+    button.MouseLeave:Connect(function()
+
+        if self.SelectedTab ~= tab then
+            button.BackgroundColor3 = self.Theme.Tab
+        end
+
+    end)
+
+    button.MouseButton1Click:Connect(function()
+
+        self:SelectTab(tab)
+
+    end)
+
+    if not self.SelectedTab then
+        self:SelectTab(tab)
+    end
+
+    return tab
+end
+
+function WindowMethods:Minimize()
+
+    self.Minimized = not self.Minimized
+
+    self._content.Visible = not self.Minimized
+
+    self._tabBar.Visible = not self.Minimized
+
+    self._resize.Visible =
+        not self.Minimized and self.Config.Resizable
+
+end
+
+function WindowMethods:Destroy()
+
+    DisconnectAll(self)
+
+    if self.Gui then
+        self.Gui:Destroy()
+    end
+
+    self.Destroyed = true
+
+end
+
+----------------------------------------------------------------
+-- WINDOW CREATION
+----------------------------------------------------------------
+
+function Novier:CreateWindow(config)
+
+    config = Merge(DefaultConfig, config)
+
+    local theme
+
+    if type(config.Theme) == "table" then
+        theme = config.Theme
+    else
+        theme =
+            Novier.Themes[config.Theme]
+            or Novier.Themes.Retro
+    end
+
+    local parent = config.Parent
+
+    if not parent then
+        parent = CoreGui
+    end
+
+    ------------------------------------------------------------
+    -- WINDOW OBJECT
+    ------------------------------------------------------------
+
+    local Window = setmetatable({
+
+        Config = config,
+
+        Theme = theme,
+
+        Tabs = {},
+
+        SelectedTab = nil,
+
+        Visible = true,
+
+        Minimized = false,
+
+        Destroyed = false,
+
+        _connections = {},
+
+    }, {
+        __index = WindowMethods
+    })
+
+    ------------------------------------------------------------
+    -- SCREEN GUI
+    ------------------------------------------------------------
+
+    local gui = New("ScreenGui", {
+        Name = "NovierWindow_" .. tostring(math.random(10000, 99999)),
+
+        ResetOnSpawn = false,
+
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+
+        Parent = parent
+    })
+
+    Window.Gui = gui
+
+    ------------------------------------------------------------
+    -- MAIN WINDOW
+    ------------------------------------------------------------
+
+    local main = New("Frame", {
+
+        Size = config.Size,
+
+        Position =
+            config.Position
+            or UDim2.new(
+                0.5,
+                -(config.Size.X.Offset / 2),
+                0.5,
+                -(config.Size.Y.Offset / 2)
+            ),
+
+        BackgroundColor3 = theme.Background,
+
+        BorderSizePixel = 1,
+
+        BorderColor3 = theme.Border,
+
+        Parent = gui
+    })
+
+    Window.Main = main
+
+    ------------------------------------------------------------
+    -- TITLE BAR
+    ------------------------------------------------------------
+
+    local titleBar = New("Frame", {
+
+        Size = UDim2.new(1, 0, 0, 28),
+
+        BackgroundColor3 = theme.TitleBar,
+
+        BorderSizePixel = 1,
+
+        BorderColor3 = theme.Border,
+
+        Parent = main
+    })
+
+    local title = New("TextLabel", {
+
+        Position = UDim2.fromOffset(7, 0),
+
+        Size = UDim2.new(1, -80, 1, 0),
+
+        BackgroundTransparency = 1,
+
+        Font = config.Font,
+
+        TextSize = 14,
+
+        TextColor3 = theme.TextLight,
+
+        TextXAlignment = Enum.TextXAlignment.Left,
+
+        Text = config.Title,
+
+        Parent = titleBar
+    })
+
+    Window._title = title
+
+    ------------------------------------------------------------
     -- CLOSE
-    --====================================================--
+    ------------------------------------------------------------
 
-    connect(Close.MouseButton1Click, function()
-        Novier:Destroy()
-    end)
+    if config.ShowClose then
 
-    --====================================================--
-    -- DRAG
-    --====================================================--
+        local close = New("TextButton", {
 
-    makeDraggable(Main, TitleBar)
+            Position = UDim2.new(1, -27, 0, 3),
 
-    --====================================================--
-    -- RESIZE
-    --====================================================--
+            Size = UDim2.fromOffset(22, 22),
 
-    local ResizeHandle = Instance.new("TextButton")
+            BackgroundColor3 = theme.Button,
 
-    ResizeHandle.Size = UDim2.fromOffset(18, 18)
+            BorderSizePixel = 1,
 
-    ResizeHandle.Position = UDim2.new(1, -18, 1, -18)
+            BorderColor3 = theme.Border,
 
-    ResizeHandle.BackgroundTransparency = 1
+            Font = Enum.Font.Code,
 
-    ResizeHandle.Text = "◢"
+            TextSize = 14,
 
-    ResizeHandle.TextColor3 = Novier.Theme.MutedText
+            TextColor3 = theme.Text,
 
-    ResizeHandle.TextSize = 12
+            Text = "X",
 
-    ResizeHandle.Parent = Main
+            Parent = titleBar
+        })
 
-    local resizing = false
-    local resizeStart
-    local resizeSize
+        close.MouseButton1Click:Connect(function()
 
-    connect(ResizeHandle.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = true
-            resizeStart = input.Position
-            resizeSize = Main.AbsoluteSize
-        end
-    end)
+            Window:Destroy()
 
-    connect(UserInputService.InputChanged, function(input)
-        if not resizing then
-            return
-        end
-
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement then
-            return
-        end
-
-        local delta = input.Position - resizeStart
-
-        local width = math.max(
-            Novier.Config.MinWidth,
-            resizeSize.X + delta.X
-        )
-
-        local height = math.max(
-            Novier.Config.MinHeight,
-            resizeSize.Y + delta.Y
-        )
-
-        Main.Size = UDim2.fromOffset(
-            width,
-            height
-        )
-
-        Shadow.Size = UDim2.fromOffset(
-            width + 8,
-            height + 8
-        )
-    end)
-
-    connect(UserInputService.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = false
-        end
-    end)
-
-    --====================================================--
-    -- OPEN ANIMATION
-    --====================================================--
-
-    Main.Size = UDim2.fromOffset(0, 0)
-
-    Shadow.Size = UDim2.fromOffset(0, 0)
-
-    tween(Main, {
-        Size = normalSize
-    }, 0.3)
-
-    tween(Shadow, {
-        Size = UDim2.fromOffset(
-            Novier.Config.Width + 8,
-            Novier.Config.Height + 8
-        )
-    }, 0.3)
-
-    --====================================================--
-    -- RETURN OBJECT
-    --====================================================--
-
-    function WindowObject:SetVisible(state)
-        Gui.Enabled = state
-    end
-
-    function WindowObject:GetVisible()
-        return Gui.Enabled
-    end
-
-    function WindowObject:SetTitle(newTitle)
-        Title.Text = newTitle
-    end
-
-    function WindowObject:Destroy()
-        Novier:Destroy()
-    end
-
-    return WindowObject
-end
-
---========================================================--
--- THEME
---========================================================--
-
-function Novier:SetTheme(theme)
-    for key, value in pairs(theme) do
-        if Novier.Theme[key] ~= nil then
-            Novier.Theme[key] = value
-        end
-    end
-
-    -- Recreate is intentionally avoided here.
-    -- New controls automatically use the updated theme.
-end
-
---========================================================--
--- DESTROY
---========================================================--
-
-function Novier:Destroy()
-    for _, connection in ipairs(Novier._Connections) do
-        pcall(function()
-            connection:Disconnect()
         end)
+
     end
 
-    table.clear(Novier._Connections)
+    ------------------------------------------------------------
+    -- MINIMIZE
+    ------------------------------------------------------------
 
-    if Novier._Gui then
-        Novier._Gui:Destroy()
+    if config.ShowMinimize then
+
+        local minimize = New("TextButton", {
+
+            Position = UDim2.new(1, -52, 0, 3),
+
+            Size = UDim2.fromOffset(22, 22),
+
+            BackgroundColor3 = theme.Button,
+
+            BorderSizePixel = 1,
+
+            BorderColor3 = theme.Border,
+
+            Font = Enum.Font.Code,
+
+            TextSize = 14,
+
+            TextColor3 = theme.Text,
+
+            Text = "_",
+
+            Parent = titleBar
+        })
+
+        minimize.MouseButton1Click:Connect(function()
+
+            Window:Minimize()
+
+        end)
+
     end
 
-    Novier._Gui = nil
-    Novier._Window = nil
+    ------------------------------------------------------------
+    -- DRAGGING
+    ------------------------------------------------------------
 
-    table.clear(Novier._Tabs)
+    if config.Draggable then
 
-    Novier._ActiveTab = nil
+        local dragging = false
+
+        local dragStart
+
+        local startPosition
+
+        titleBar.InputBegan:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                dragging = true
+
+                dragStart = input.Position
+
+                startPosition = main.Position
+
+            end
+
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+
+            if not dragging then
+                return
+            end
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseMovement then
+
+                local delta =
+                    input.Position - dragStart
+
+                main.Position =
+                    UDim2.new(
+                        startPosition.X.Scale,
+                        startPosition.X.Offset + delta.X,
+
+                        startPosition.Y.Scale,
+                        startPosition.Y.Offset + delta.Y
+                    )
+
+            end
+
+        end)
+
+        UserInputService.InputEnded:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                dragging = false
+
+            end
+
+        end)
+
+    end
+
+    ------------------------------------------------------------
+    -- BODY
+    ------------------------------------------------------------
+
+    local body = New("Frame", {
+
+        Position = UDim2.fromOffset(0, 28),
+
+        Size = UDim2.new(1, 0, 1, -28),
+
+        BackgroundColor3 = theme.Background,
+
+        BorderSizePixel = 0,
+
+        Parent = main
+    })
+
+    Window._content = body
+
+    ------------------------------------------------------------
+    -- TAB BAR
+    ------------------------------------------------------------
+
+    local tabBar = New("Frame", {
+
+        Size = UDim2.new(0, 135, 1, 0),
+
+        BackgroundColor3 = theme.PanelDark,
+
+        BorderSizePixel = 1,
+
+        BorderColor3 = theme.Border,
+
+        Parent = body
+    })
+
+    Window._tabBar = tabBar
+
+    local tabList = New("ScrollingFrame", {
+
+        Position = UDim2.fromOffset(3, 5),
+
+        Size = UDim2.new(1, -6, 1, -10),
+
+        BackgroundTransparency = 1,
+
+        BorderSizePixel = 0,
+
+        ScrollBarThickness = 4,
+
+        ScrollBarImageColor3 = theme.Accent,
+
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+
+        CanvasSize = UDim2.new(),
+
+        Parent = tabBar
+    })
+
+    local tabLayout = New("UIListLayout", {
+
+        Padding = UDim.new(0, 3),
+
+        SortOrder = Enum.SortOrder.LayoutOrder,
+
+        Parent = tabList
+    })
+
+    Window._tabList = tabList
+
+    ------------------------------------------------------------
+    -- PAGES
+    ------------------------------------------------------------
+
+    local pages = New("Frame", {
+
+        Position = UDim2.new(0, 135, 0, 0),
+
+        Size = UDim2.new(1, -135, 1, 0),
+
+        BackgroundTransparency = 1,
+
+        Parent = body
+    })
+
+    Window._pages = pages
+
+    ------------------------------------------------------------
+    -- NOTIFICATIONS
+    ------------------------------------------------------------
+
+    local notificationHolder = New("Frame", {
+
+        Position = UDim2.new(1, -310, 1, -90),
+
+        Size = UDim2.fromOffset(300, 80),
+
+        BackgroundTransparency = 1,
+
+        Parent = gui
+    })
+
+    local notificationLayout = New("UIListLayout", {
+
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
+
+        Padding = UDim.new(0, 6),
+
+        Parent = notificationHolder
+    })
+
+    Window._notificationHolder = notificationHolder
+
+    ------------------------------------------------------------
+    -- RESIZE HANDLE
+    ------------------------------------------------------------
+
+    local resize = New("TextButton", {
+
+        Position = UDim2.new(1, -15, 1, -15),
+
+        Size = UDim2.fromOffset(15, 15),
+
+        BackgroundColor3 = theme.PanelDark,
+
+        BorderSizePixel = 1,
+
+        BorderColor3 = theme.Border,
+
+        Text = "",
+
+        AutoButtonColor = false,
+
+        Parent = main
+    })
+
+    Window._resize = resize
+
+    if not config.Resizable then
+        resize.Visible = false
+    end
+
+    if config.Resizable then
+
+        local resizing = false
+
+        local resizeStart
+
+        local startSize
+
+        resize.InputBegan:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                resizing = true
+
+                resizeStart = input.Position
+
+                startSize = main.Size
+
+            end
+
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+
+            if not resizing then
+                return
+            end
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseMovement then
+
+                local delta =
+                    input.Position - resizeStart
+
+                local width =
+                    math.max(
+                        400,
+                        startSize.X.Offset + delta.X
+                    )
+
+                local height =
+                    math.max(
+                        250,
+                        startSize.Y.Offset + delta.Y
+                    )
+
+                main.Size =
+                    UDim2.fromOffset(
+                        width,
+                        height
+                    )
+
+            end
+
+        end)
+
+        UserInputService.InputEnded:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                resizing = false
+
+            end
+
+        end)
+
+    end
+
+    ------------------------------------------------------------
+    -- GLOBAL TOGGLE KEY
+    ------------------------------------------------------------
+
+    if config.ToggleKey then
+
+        AddConnection(
+            Window,
+            UserInputService.InputBegan:Connect(
+                function(input, processed)
+
+                    if processed then
+                        return
+                    end
+
+                    if input.KeyCode ==
+                        config.ToggleKey then
+
+                        Window:SetVisible(
+                            not Window:IsVisible()
+                        )
+
+                    end
+
+                end
+            )
+        )
+
+    end
+
+    return Window
 end
+
+----------------------------------------------------------------
+-- SIMPLE ALIAS
+----------------------------------------------------------------
+
+Novier.new = Novier.CreateWindow
+
+----------------------------------------------------------------
+-- RETURN LIBRARY
+----------------------------------------------------------------
 
 return Novier
-```
-
-### Example
-
-```lua
-local Novier = loadstring(game:HttpGet("YOUR_LIBRARY_URL"))()
-
-local Window = Novier:CreateWindow("Novier-HB")
-
-local PlayerTab = Window:CreateTab("PLAYER", "◆")
-local VisualTab = Window:CreateTab("VISUAL", "◇")
-local SettingsTab = Window:CreateTab("SETTINGS", "⚙")
-
-local Movement = PlayerTab:CreateSection("Movement")
-
-Movement:CreateToggle("Infinite Jump", false, function(enabled)
-    print("Infinite Jump:", enabled)
-end)
-
-Movement:CreateSlider("WalkSpeed", 16, 100, 16, function(value)
-    print("WalkSpeed:", value)
-end)
-
-Movement:CreateButton("Reset Character", function()
-    print("Reset")
-end)
-
-local PlayerSettings = PlayerTab:CreateSection("Player")
-
-PlayerSettings:CreateTextbox(
-    "Username",
-    "Enter username...",
-    function(text)
-        print(text)
-    end
-)
-
-PlayerSettings:CreateDropdown(
-    "Mode",
-    {"Normal", "Fast", "Extreme"},
-    "Normal",
-    function(value)
-        print("Mode:", value)
-    end
-)
-
-local Settings = SettingsTab:CreateSection("Interface")
-
-Settings:CreateKeybind(
-    "Toggle UI",
-    Enum.KeyCode.RightShift,
-    function()
-        Window:SetVisible(not Window:GetVisible())
-    end
-)
-
-Settings:CreateButton("Test Notification", function()
-    Novier:Notify(
-        "Novier-HB",
-        "Hello from the retro interface.",
-        3,
-        "Success"
-    )
-end)
-
-Settings:CreateLabel(
-    "Novier-HB Retro Interface v1.0.0"
-)
-```
-
-The key difference here is that **Novier-HB is actually structured as a library**, rather than one giant GUI creation function. Tabs own pages, pages own sections, sections own controls, and the window handles dragging/minimizing/maximizing/resizing independently.
