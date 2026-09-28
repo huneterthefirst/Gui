@@ -227,7 +227,7 @@ Window:SetVisible()      -- Toggle current state
 ## Complete Example
 
 ```lua
-local RAW_URL = "https://raw.githubusercontent.com/YourUsername/Novier-UI/main/NovierLibrary.lua"
+local RAW_URL = "https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"
 local Novier = loadstring(game:HttpGet(RAW_URL .. "?v=" .. tostring(os.time())))()
 
 local Window = Novier:CreateWindow("NOVIER // ISLAND")
