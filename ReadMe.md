@@ -1,51 +1,71 @@
-# Novier // Dynamic Island & Cyber Engine (v4.3)
+# Novier // Dynamic Island & Cyber Engine (v4.6)
 
-A cyberpunk-inspired Roblox UI library built around an overhead Dynamic Island capsule, real-time 16-band audio spectrum analyzer, live Lua code rain background, and an expandable high-capacity drawer interface.
-
----
-
-## Features
-
-* **Dynamic Island Capsule**: Sleek top-pinned island with integrated 16-band audio visualizer.
-* **Audio Engine & Media Suite**: Real-time reactive spectrum analyzer with master volume gain, preset tracks, and custom Sound ID loading.
-* **Full-Screen Lua Bytecode Rain**: Ambient real-time code-stream canvas running in the background.
-* **Infinite Auto-Scrolling**: Drawer workspace automatically calculates and scales its canvas for limitless controls without boundary clipping.
-* **High-Contrast OLED Palette**: Deep matte containers with vivid neon cyan and mint accents.
-* **Zero Boilerplate Toggle**: Defaults to `[RightControl]` automatically.
+An advanced cyberpunk Roblox UI library built around an overhead Dynamic Island capsule, real-time audio spectrum visualization, beat-synchronized camera FOV pulsing, live falling Lua bytecode rain, and dynamic nested sub-tab architecture.
 
 ---
 
-## Quickstart
+## Direct GitHub Loader
+
+Use this universal, executor-safe loader script to load the library directly from the GitHub repository:
 
 ```lua
 local RAW_URL = "https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"
-local Novier = loadstring(game:HttpGet(RAW_URL .. "?v=" .. tostring(os.time())))() -- P.S. too lazy to remove the testing loadstring but you can clean it yourself
 
--- Initialize the island capsule
+-- Universal fallback request fetcher to prevent executor HTTP/JSON parser crashes
+local customRequest = (syn and syn.request) or (http and http.request) or http_request or request
+local source
+
+if customRequest then
+    local res = customRequest({
+        Url = RAW_URL,
+        Method = "GET",
+        Headers = {
+            ["Cache-Control"] = "no-cache",
+            ["Pragma"] = "no-cache"
+        }
+    })
+    source = res.Body
+else
+    source = game:HttpGet(RAW_URL)
+end
+
+local Novier = loadstring(source)()
+
+-- Initialize the top pill capsule
 local Window = Novier:CreateWindow("NOVIER // ISLAND")
 
 ```
 
 ---
 
-## Full API Reference & Tutorials
+## Core Features
 
-### 1. Window Creation
+* **Dynamic Island Capsule**: Top-center pinned capsule holding the branding, interactive tabs, and an oscillating 16-band real-time audio visualizer.
+* **Dual Edge-Screen Beat Wings**: Mirrored 12-band audio reactive pulses on the left and right edges of the screen that expand inward with bass drops.
+* **Beat-Synchronized Camera FOV**: Camera dynamically punches in and out with audio peaks and bass kicks, toggled instantly via `[RightAlt]`.
+* **Dynamic Nested Sub-Tabs**: Add, remove, or clear isolated sub-pages at runtime without re-rendering the parent tab.
+* **Full-Screen Lua Bytecode Rain**: Ambient background canvas streaming real Lua instructions, functions, and hex memory offsets (`ZIndex = 1`).
+* **High-Capacity Auto-Scrolling Drawer**: 840x560 workspace that automatically expands its canvas bounds for unlimited sections and components.
+* **Zero-Boilerplate Hotkeys**: UI toggle defaults to `[RightControl]`, Beat FOV toggle defaults to `[RightAlt]`.
 
-Creates the screen HUD, background rain canvas, audio driver, and top capsule.
+---
+
+## API Reference & Examples
+
+### 1. Window Initialization
 
 ```lua
 local Window = Novier:CreateWindow(windowTitle)
 
 ```
 
-* `windowTitle` *(string)*: The title displayed on the left side of the top island.
+* `windowTitle` *(string)*: Label displayed on the left side of the top pill capsule.
 
 ---
 
-### 2. Built-in Media Suite
+### 2. Media Suite & Beat FOV
 
-Generates a dedicated audio tab with preset selection, play/pause controls, master gain adjustment (up to 200%), and a custom sound loader.
+Creates the audio controller, track switcher, volume slider, custom asset ID loader, and Beat FOV kick configuration:
 
 ```lua
 local MediaSuite = Window:CreateMediaSuite({
@@ -54,51 +74,75 @@ local MediaSuite = Window:CreateMediaSuite({
     ["Dark Cyber"]      = "rbxassetid://1843404009"
 })
 
--- Manually load any audio ID directly via script:
+-- Manually load any numeric sound asset ID via script:
 MediaSuite:PlayCustom("9043887091")
 
 ```
 
 ---
 
-### 3. Tabs
+### 3. Top-Level Tabs
 
-Tabs are added to the right side of the pill capsule. Clicking any tab toggles the dropdown drawer deck underneath.
+Creates capsule buttons on the right side of the pill. Clicking a tab opens/closes the drawer deck below:
 
 ```lua
--- CreateTab(tabName, iconSymbol)
--- iconSymbol can be a single character/emoji or left blank
-local CombatTab = Window:CreateTab("COMBAT", "⚔")
-local VisualsTab = Window:CreateTab("VISUALS", "👁")
-local SystemTab  = Window:CreateTab("SYS", ">_")
+local CombatTab  = Window:CreateTab("COMBAT", "⚔")
+local PlayersTab = Window:CreateTab("PLAYERS", "👤")
+local ConsoleTab = Window:CreateTab("SYS", ">_")
 
 ```
 
 ---
 
-### 4. Sections
+### 4. Dynamic Sub-Tabs
 
-Sections group related controls inside high-contrast bordered cards within the active tab.
+Adds a secondary horizontal navigation bar inside any tab with isolated scrolling viewports.
 
 ```lua
-local Locomotion = CombatTab:CreateSection("Locomotion Engine")
+-- Initialize a sub-tab group inside a parent tab:
+local SubSystem = PlayersTab:CreateSubTabs({
+    {"Server Info", "🌐"},
+    {"Whitelist", "🛡"}
+})
+
+-- Access an initialized sub-tab:
+local ServerPage = SubSystem.SubTabs["Server Info"]
+local InfoSec = ServerPage:CreateSection("Server Overview")
+
+-- Dynamically inject a new sub-tab at runtime (e.g., when a player joins):
+local NewSub = SubSystem:AddSubTab("Player123", "⚡")
+local ActionSec = NewSub:CreateSection("Target Actions")
+ActionSec:CreateButton("Teleport", function() end)
+
+-- Dynamically remove a sub-tab (e.g., when a player leaves):
+SubSystem:RemoveSubTab("Player123")
+
+-- Clear all active sub-tabs:
+SubSystem:ClearSubTabs()
 
 ```
 
 ---
 
-### 5. Components
+### 5. Sections & Components
+
+Sections can be added to standard tabs or nested sub-tabs:
+
+```lua
+local Section = CombatTab:CreateSection("Locomotion Engine")
+-- or
+local Section = SubTab:CreateSection("Target Settings")
+
+```
 
 #### Buttons
 
-Standard clickable action button with animated feedback.
-
 ```lua
-Locomotion:CreateButton("Emergency Deceleration", function()
+Section:CreateButton("Emergency Stop", function()
     local root = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if root then
         root.AssemblyLinearVelocity = Vector3.zero
-        Novier:Notify("Physics Engine", "Linear velocity arrested.", 2, "Warning")
+        Novier:Notify("Physics", "Velocity arrested.", 2, "Warning")
     end
 end)
 
@@ -106,52 +150,41 @@ end)
 
 #### Toggles
 
-Animated pill switch supporting default values and state callbacks.
-
 ```lua
-local JumpToggle = Locomotion:CreateToggle("Super Jump", false, function(enabled)
+local JumpToggle = Section:CreateToggle("Super Jump", false, function(state)
     local hum = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if hum then
         hum.UseJumpPower = true
-        hum.JumpPower = enabled and 120 or 50
+        hum.JumpPower = state and 120 or 50
     end
 end)
 
--- Programmatic control:
-JumpToggle:Set(true)            -- Force switch to on
-local state = JumpToggle:Get()  -- Returns current boolean
+JumpToggle:Set(true)             -- Programmatic update
+local active = JumpToggle:Get()  -- Returns boolean
 
 ```
 
 #### Sliders
 
-Precise draggable and click-to-seek slider with step-snapping.
-
 ```lua
 -- CreateSlider(name, min, max, default, step, callback)
-local SpeedSlider = Locomotion:CreateSlider("WalkSpeed Velocity", 16, 250, 16, 1, function(value)
+local SpeedSlider = Section:CreateSlider("WalkSpeed", 16, 250, 16, 1, function(val)
     local hum = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = value
-    end
+    if hum then hum.WalkSpeed = val end
 end)
 
--- Programmatic control:
-SpeedSlider:Set(100)            -- Set value
-local current = SpeedSlider:Get()
+SpeedSlider:Set(100)
+local currentSpeed = SpeedSlider:Get()
 
 ```
 
 #### Textboxes
 
-Custom text input with `ClearTextOnFocus` options and enter-key detection.
-
 ```lua
 -- CreateTextbox(name, placeholder, clearOnFocus, callback)
-Locomotion:CreateTextbox("Custom Teleport", "Enter player name...", false, function(text, enterPressed)
+Section:CreateTextbox("Custom Payload", "Type code here...", false, function(text, enterPressed)
     if enterPressed and #text > 0 then
-        print("Target submitted:", text)
-        Novier:Notify("Network", "Searching for " .. text, 3, "Success")
+        print("Payload saved:", text)
     end
 end)
 
@@ -159,128 +192,191 @@ end)
 
 #### Dropdowns
 
-Unclipped overlay dropdown with automatic sizing and hover states.
-
 ```lua
--- CreateDropdown(name, optionsList, default, callback)
-local TeamSelector = VisualsTab:CreateDropdown("Target Teams", {"Enemies", "Friendlies", "Neutral", "All"}, "Enemies", function(selected)
-    print("Filter mode updated:", selected)
+-- CreateDropdown(name, optionsTable, default, callback)
+local ModeSelector = Section:CreateDropdown("Filter Mode", {"Enemies", "Friendlies", "All"}, "Enemies", function(selected)
+    print("Mode updated:", selected)
 end)
 
--- Programmatic control:
-TeamSelector:Set("All")
-local currentChoice = TeamSelector:Get()
+ModeSelector:Set("All")
 
 ```
 
 #### Virtual Terminal / Console Output
 
-In-window scrolling terminal for logging, live debugging, and telemetry.
-
 ```lua
--- CreateTerminal(height)
-local Console = SystemTab:CreateTerminal(140)
+local Terminal = Section:CreateTerminal(130)
 
-Console:Log("Routine memory scan initialized.")
-Console:Warn("Telemetry latency at standard thresholds.")
-Console:Error("Buffer bypass failure (Test).")
-
--- Clear all logs:
-Console:Clear()
+Terminal:Log("Thread started.")
+Terminal:Warn("Latency spike detected.")
+Terminal:Error("Buffer allocation failure.")
+Terminal:Clear()
 
 ```
 
 ---
 
-### 6. Toast Notifications
-
-Edge-mounted status alerts with slide-in animations and automatic dismiss timeouts.
+### 6. Notifications & Controls
 
 ```lua
--- Novier:Notify(title, message, duration, type)
--- Types: "Success", "Warning", "Error", or nil (Accent)
-Novier:Notify("Kernel", "Configuration loaded successfully.", 3, "Success")
-Novier:Notify("Memory", "Unstable allocation detected.", 4, "Warning")
-Novier:Notify("Security", "Connection rejected by remote host.", 5, "Error")
+-- Toast Notification: "Success", "Warning", "Error", or nil (Accent)
+Novier:Notify("System", "Script loaded successfully.", 3, "Success")
+
+-- Window Visibility
+Window:SetVisible(true)   -- Open
+Window:SetVisible(false)  -- Close
+Window:SetVisible()       -- Toggle
+
+-- Hotkey Configuration
+Window.ToggleKey = Enum.KeyCode.RightControl
+Window.FovKey = Enum.KeyCode.RightAlt
 
 ```
 
 ---
 
-### 7. Window Visibility & Keybind Management
-
-By default, pressing `[RightControl]` slides the island and drawer in and out. You can change this keybind or toggle visibility programmatically.
+## Complete Starter Script
 
 ```lua
--- Change the keybind:
-Window.ToggleKey = Enum.KeyCode.LeftAlt
+--========================================================--
+-- NOVIER // ZERO-DAY DYNAMIC RUNNER
+--========================================================--
 
--- Programmatic toggle:
-Window:SetVisible(false) -- Hide the UI
-Window:SetVisible(true)  -- Show the UI
-Window:SetVisible()      -- Toggle current state
-
-```
-
----
-
-## Complete Example
-
-```lua
 local RAW_URL = "https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"
-local Novier = loadstring(game:HttpGet(RAW_URL .. "?v=" .. tostring(os.time())))()
 
-local Window = Novier:CreateWindow("NOVIER // ISLAND")
+local customRequest = (syn and syn.request) or (http and http.request) or http_request or request
+local source
 
--- 1. Music and Visualizer
+if customRequest then
+    local res = customRequest({
+        Url = RAW_URL,
+        Method = "GET",
+        Headers = {
+            ["Cache-Control"] = "no-cache",
+            ["Pragma"] = "no-cache"
+        }
+    })
+    source = res.Body
+else
+    source = game:HttpGet(RAW_URL)
+end
+
+local Novier = loadstring(source)()
+
+-- 1. Initialize Top Dynamic Capsule
+local Window = Novier:CreateWindow("NOVIER // ZERO-DAY")
+
+-- 2. Integrated Media & Beat-FOV Audio Engine
+-- Hotkey to toggle Beat Camera Kick: [RightAlt]
 local MediaSuite = Window:CreateMediaSuite({
     ["Synth Action"]    = "rbxassetid://9043887091",
     ["Action Drive"]    = "rbxassetid://1840590064",
     ["Dark Cyber"]      = "rbxassetid://1843404009"
 })
 
--- 2. Player Mechanics
-local PlayerTab = Window:CreateTab("PLAYER", "⚡")
-local Movement = PlayerTab:CreateSection("Locomotion")
+-- 3. Executor / Workbench Tab (Textbox + Button)
+local ExecTab = Window:CreateTab("EXEC", "⚡")
+local ExecSec = ExecTab:CreateSection("Custom Bytecode Runner")
 
-Movement:CreateToggle("Super Jump", false, function(active)
-    local char = game.Players.LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char:FindFirstChildOfClass("Humanoid").JumpPower = active and 120 or 50
+local currentPayload = ""
+
+ExecSec:CreateTextbox("Script Payload", "Type or paste script code here...", false, function(txt)
+    currentPayload = txt
+end)
+
+ExecSec:CreateButton("Execute Script", function()
+    if #currentPayload == 0 then
+        Novier:Notify("Warning", "Input field is completely empty.", 2, "Warning")
+        return
+    end
+
+    local fn, compileErr = loadstring(currentPayload)
+    if not fn then
+        Novier:Notify("Syntax Error", tostring(compileErr), 4, "Error")
+        return
+    end
+
+    local success, runtimeErr = pcall(fn)
+    if success then
+        Novier:Notify("Executed", "Code executed with 0 errors.", 3, "Success")
+    else
+        Novier:Notify("Runtime Error", tostring(runtimeErr), 4, "Error")
     end
 end)
 
-Movement:CreateSlider("WalkSpeed", 16, 250, 16, 1, function(val)
-    local char = game.Players.LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char:FindFirstChildOfClass("Humanoid").WalkSpeed = val
-    end
+-- 4. Dynamic Live Players Tab with Sub-Tabs
+local PlayersTab = Window:CreateTab("PLAYERS", "👤")
+
+local PlayerSubTabs = PlayersTab:CreateSubTabs({
+    {"Server Info", "🌐"}
+})
+
+local ServerPage = PlayerSubTabs.SubTabs["Server Info"]
+local InfoSec = ServerPage:CreateSection("Server Overview")
+
+InfoSec:CreateButton("Ping Server Population", function()
+    local count = #game:GetService("Players"):GetPlayers()
+    Novier:Notify("Server Stats", "Active Players: " .. tostring(count), 3, "Success")
 end)
 
-Movement:CreateButton("Emergency Stop", function()
-    local char = game.Players.LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-        Novier:Notify("Physics", "Momentum arrested.", 2, "Warning")
-    end
+local function hookPlayer(player)
+    if player == game.Players.LocalPlayer then return end
+
+    local userSub = PlayerSubTabs:AddSubTab(player.DisplayName, "⚡")
+    local actionSec = userSub:CreateSection(player.Name .. " (@" .. player.UserId .. ")")
+
+    actionSec:CreateButton("Teleport to Target", function()
+        local myRoot = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local theirRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+        if myRoot and theirRoot then
+            myRoot.CFrame = theirRoot.CFrame * CFrame.new(0, 0, 3)
+            Novier:Notify("Teleport", "Jumped to " .. player.DisplayName, 2, "Success")
+        else
+            Novier:Notify("Error", "Character model missing.", 2, "Error")
+        end
+    end)
+
+    actionSec:CreateButton("Spectate Target", function()
+        local cam = workspace.CurrentCamera
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            cam.CameraSubject = player.Character.Humanoid
+            Novier:Notify("Spectate", "Targeting " .. player.DisplayName, 2, "Success")
+        end
+    end)
+end
+
+for _, pl in ipairs(game:GetService("Players"):GetPlayers()) do
+    hookPlayer(pl)
+end
+
+game:GetService("Players").PlayerAdded:Connect(function(pl)
+    hookPlayer(pl)
+    Novier:Notify("Connected", pl.DisplayName .. " joined the session.", 3, "Success")
 end)
 
--- 3. System Console
-local SysTab = Window:CreateTab("SYS", ">_")
-local SysSec = SysTab:CreateSection("Live Diagnostics")
-local Console = SysSec:CreateTerminal(120)
+game:GetService("Players").PlayerRemoving:Connect(function(pl)
+    PlayerSubTabs:RemoveSubTab(pl.DisplayName)
+    Novier:Notify("Disconnected", pl.DisplayName .. " left the session.", 3, "Warning")
+end)
 
-SysSec:CreateButton("Run Diagnostic", function()
-    Console:Log("Inspecting local thread status...")
+-- 5. System Console Tab
+local ConsoleTab = Window:CreateTab("SYS", ">_")
+local ConsoleSec = ConsoleTab:CreateSection("Virtual Output")
+local Console = ConsoleSec:CreateTerminal(140)
+
+ConsoleSec:CreateButton("Run Integrity Check", function()
+    Console:Log("Inspecting thread execution...")
     task.wait(0.2)
-    Console:Warn("Pill visualizer running smoothly at 60 FPS.")
-    Novier:Notify("Kernel", "Diagnostics completed.", 3, "Success")
+    Console:Warn("Audio Beat-FOV & Matrix Rain stable.")
+    Novier:Notify("Diagnostics", "System health at 100%.", 3, "Success")
 end)
 
-SysSec:CreateButton("Clear Logs", function()
+ConsoleSec:CreateButton("Flush Terminal", function()
     Console:Clear()
 end)
 
-Novier:Notify("Novier Core", "Dynamic Island online. Press [RightControl] to toggle.", 4, "Success")
+-- Startup Alert
+Novier:Notify("Novier Online", "UI: [RightControl] | Beat-FOV Kick: [RightAlt]", 5, "Success")
 
 ```
