@@ -5,7 +5,7 @@
     - Capsule Icon Tabs (Supports single-char glyphs & labels)
     - Expandable Floating Control Deck
     - Default Global Toggle: [RightControl]
-    - Screen-wide HUD telemetry & corner brackets
+    - Screen-wide HUD telemetry & corner brackets d
 ]]
 
 local Novier = {}
