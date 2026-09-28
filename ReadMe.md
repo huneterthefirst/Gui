@@ -1,35 +1,16 @@
-# Novier // Dynamic Island & Cyber Engine (v4.6)
+# Novier // Dynamic Island & Cyber Engine (v4.7)
 
-An advanced cyberpunk Roblox UI library built around an overhead Dynamic Island capsule, real-time audio spectrum visualization, beat-synchronized camera FOV pulsing, live falling Lua bytecode rain, and dynamic nested sub-tab architecture.
+An advanced cyberpunk Roblox UI library built around an overhead Dynamic Island capsule, real-time audio spectrum visualization, beat-synchronized camera FOV pulsing, live falling Lua bytecode rain, and dynamic horizontally-scrolling nested sub-tabs.
 
 ---
 
 ## Direct GitHub Loader
 
-Use this universal, executor-safe loader script to load the library directly from the GitHub repository:
+Load the library directly using standard `loadstring` and `game:HttpGet`:
 
 ```lua
 local RAW_URL = "https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"
-
--- Universal fallback request fetcher to prevent executor HTTP/JSON parser crashes
-local customRequest = (syn and syn.request) or (http and http.request) or http_request or request
-local source
-
-if customRequest then
-    local res = customRequest({
-        Url = RAW_URL,
-        Method = "GET",
-        Headers = {
-            ["Cache-Control"] = "no-cache",
-            ["Pragma"] = "no-cache"
-        }
-    })
-    source = res.Body
-else
-    source = game:HttpGet(RAW_URL)
-end
-
-local Novier = loadstring(source)()
+local Novier = loadstring(game:HttpGet(RAW_URL))()
 
 -- Initialize the top pill capsule
 local Window = Novier:CreateWindow("NOVIER // ISLAND")
@@ -43,7 +24,7 @@ local Window = Novier:CreateWindow("NOVIER // ISLAND")
 * **Dynamic Island Capsule**: Top-center pinned capsule holding the branding, interactive tabs, and an oscillating 16-band real-time audio visualizer.
 * **Dual Edge-Screen Beat Wings**: Mirrored 12-band audio reactive pulses on the left and right edges of the screen that expand inward with bass drops.
 * **Beat-Synchronized Camera FOV**: Camera dynamically punches in and out with audio peaks and bass kicks, toggled instantly via `[RightAlt]`.
-* **Dynamic Nested Sub-Tabs**: Add, remove, or clear isolated sub-pages at runtime without re-rendering the parent tab.
+* **Horizontal Scrolling Sub-Tabs**: Add unlimited nested tabs (e.g., 14+ players in a server) without clipping off the edge of the screen; includes dedicated horizontal scrolling and auto-calculating canvas widths.
 * **Full-Screen Lua Bytecode Rain**: Ambient background canvas streaming real Lua instructions, functions, and hex memory offsets (`ZIndex = 1`).
 * **High-Capacity Auto-Scrolling Drawer**: 840x560 workspace that automatically expands its canvas bounds for unlimited sections and components.
 * **Zero-Boilerplate Hotkeys**: UI toggle defaults to `[RightControl]`, Beat FOV toggle defaults to `[RightAlt]`.
@@ -94,9 +75,9 @@ local ConsoleTab = Window:CreateTab("SYS", ">_")
 
 ---
 
-### 4. Dynamic Sub-Tabs
+### 4. Horizontal Scrolling Sub-Tabs
 
-Adds a secondary horizontal navigation bar inside any tab with isolated scrolling viewports.
+Adds a secondary horizontal navigation bar inside any tab with an automated horizontal scroll container:
 
 ```lua
 -- Initialize a sub-tab group inside a parent tab:
@@ -109,12 +90,12 @@ local SubSystem = PlayersTab:CreateSubTabs({
 local ServerPage = SubSystem.SubTabs["Server Info"]
 local InfoSec = ServerPage:CreateSection("Server Overview")
 
--- Dynamically inject a new sub-tab at runtime (e.g., when a player joins):
+-- Dynamically inject a new sub-tab at runtime (smoothly scrolls right if space runs out):
 local NewSub = SubSystem:AddSubTab("Player123", "⚡")
 local ActionSec = NewSub:CreateSection("Target Actions")
 ActionSec:CreateButton("Teleport", function() end)
 
--- Dynamically remove a sub-tab (e.g., when a player leaves):
+-- Dynamically remove a sub-tab:
 SubSystem:RemoveSubTab("Player123")
 
 -- Clear all active sub-tabs:
@@ -243,25 +224,7 @@ Window.FovKey = Enum.KeyCode.RightAlt
 --========================================================--
 
 local RAW_URL = "https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"
-
-local customRequest = (syn and syn.request) or (http and http.request) or http_request or request
-local source
-
-if customRequest then
-    local res = customRequest({
-        Url = RAW_URL,
-        Method = "GET",
-        Headers = {
-            ["Cache-Control"] = "no-cache",
-            ["Pragma"] = "no-cache"
-        }
-    })
-    source = res.Body
-else
-    source = game:HttpGet(RAW_URL)
-end
-
-local Novier = loadstring(source)()
+local Novier = loadstring(game:HttpGet(RAW_URL))()
 
 -- 1. Initialize Top Dynamic Capsule
 local Window = Novier:CreateWindow("NOVIER // ZERO-DAY")
@@ -304,7 +267,7 @@ ExecSec:CreateButton("Execute Script", function()
     end
 end)
 
--- 4. Dynamic Live Players Tab with Sub-Tabs
+-- 4. Dynamic Live Players Tab with Horizontal Scrollable Sub-Tabs
 local PlayersTab = Window:CreateTab("PLAYERS", "👤")
 
 local PlayerSubTabs = PlayersTab:CreateSubTabs({
@@ -319,6 +282,7 @@ InfoSec:CreateButton("Ping Server Population", function()
     Novier:Notify("Server Stats", "Active Players: " .. tostring(count), 3, "Success")
 end)
 
+-- Dynamically mount sub-tabs for joined players (Supports 14+ players with horizontal scrolling)
 local function hookPlayer(player)
     if player == game.Players.LocalPlayer then return end
 
