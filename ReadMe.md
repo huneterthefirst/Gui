@@ -18,8 +18,8 @@ A cyberpunk-inspired Roblox UI library built around an overhead Dynamic Island c
 ## Quickstart
 
 ```lua
-local RAW_URL = "https://raw.githubusercontent.com/YourUsername/Novier-UI/main/NovierLibrary.lua"
-local Novier = loadstring(game:HttpGet(RAW_URL .. "?v=" .. tostring(os.time())))()
+local RAW_URL = "[https://raw.githubusercontent.com/YourUsername/Novier-UI/main/NovierLibrary.lua](https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua)"
+local Novier = loadstring(game:HttpGet(RAW_URL .. "?v=" .. tostring(os.time())))() -- P.S. too lazy to remove the testing loadstring but you can clean it yourself
 
 -- Initialize the island capsule
 local Window = Novier:CreateWindow("NOVIER // ISLAND")
