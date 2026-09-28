@@ -1,6 +1,6 @@
 --[[
-    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.6 DYNAMIC SUB-TABS EDITION)
-    - Dynamic Sub-Tabs & Segmented Nested Containers (Add/Remove/Clear at runtime)
+    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.7 SCROLLING SUB-TABS)
+    - Horizontal Scrolling Sub-Tab Bar: Dynamically expands and scrolls for unlimited players/tabs
     - Beat-Synchronized Audio FOV Pulsing: Camera kicks with bass & amplitude ([RightAlt])
     - Hardcoded Global Toggle for Island UI: [RightControl]
     - Mirrored Dual Edge-Screen Beat Pulse Wings (Left & Right)
@@ -25,7 +25,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 -- Palette
-Novier.Version = "4.6.0 SUB-TABS"
+Novier.Version = "4.7.0 SCROLL-TABS"
 
 Novier.Theme = {
     PillBackground   = Color3.fromRGB(12, 14, 19),
@@ -204,7 +204,7 @@ local function buildScreenHUD(screenGui)
         return frame
     end
 
-    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: DYNAMIC]\n│ SUB-TABS: ONLINE")
+    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: DYNAMIC]\n│ SUB-TABS: SCROLL-BAR ON")
     makeBracket(Vector2.new(1, 0), UDim2.new(1, -14, 0, 14), "[NOVIER // ZERO-DAY] ──┐\nSTATUS: RUNNING │")
     local bl = makeBracket(Vector2.new(0, 1), UDim2.new(0, 14, 1, -14), "│ POS: SCANNING...\n└── [TELEMETRY]")
 
@@ -639,7 +639,6 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    -- Forward declarations for control builders
     local buildSection
 
     --====================================================--
@@ -717,38 +716,44 @@ function Novier:CreateWindow(windowTitle)
         Tab.Page = Page
         table.insert(Window.Tabs, Tab)
 
-        -- Section creation on a base tab
         function Tab:CreateSection(sectionName)
             return buildSection(Page, sectionName, OverlayLayer)
         end
 
         --====================================================--
-        -- DYNAMIC SUB-TABS BUILDER
+        -- DYNAMIC SUB-TABS (WITH HORIZONTAL SCROLLBAR FIX)
         --====================================================--
         function Tab:CreateSubTabs(initialList)
             local SubTabSystem = {}
             SubTabSystem.SubTabs = {}
             SubTabSystem.ActiveSubTab = nil
 
-            -- Header Bar for Sub-Tabs
+            -- Fixed: Full horizontal scrolling bar with visible custom scrollbar and bounds
             local SubTabBar = create("ScrollingFrame", {
                 Name = "SubTabBar",
-                Size = UDim2.new(1, 0, 0, 32),
+                Size = UDim2.new(1, 0, 0, 36),
                 BackgroundTransparency = 1,
-                ScrollBarThickness = 0,
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = Novier.Theme.Accent,
+                ScrollingDirection = Enum.ScrollingDirection.X,
                 CanvasSize = UDim2.new(),
                 ZIndex = 14,
+                ClipsDescendants = true,
                 Parent = Page
             }, {
                 create("UIListLayout", {
                     FillDirection = Enum.FillDirection.Horizontal,
                     SortOrder = Enum.SortOrder.LayoutOrder,
                     Padding = UDim.new(0, 6)
+                }),
+                create("UIPadding", {
+                    PaddingBottom = UDim.new(0, 4)
                 })
             })
 
+            -- Auto-update horizontal canvas size dynamically when players/subtabs are added
             SubTabBar.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                SubTabBar.CanvasSize = UDim2.fromOffset(SubTabBar.UIListLayout.AbsoluteContentSize.X + 10, 0)
+                SubTabBar.CanvasSize = UDim2.fromOffset(SubTabBar.UIListLayout.AbsoluteContentSize.X + 24, 0)
             end)
 
             -- Sub-Page Viewport Holder
@@ -760,7 +765,6 @@ function Novier:CreateWindow(windowTitle)
                 Parent = Page
             })
 
-            -- Method to add a single sub-tab dynamically
             function SubTabSystem:AddSubTab(subName, icon)
                 if SubTabSystem.SubTabs[subName] then
                     return SubTabSystem.SubTabs[subName]
@@ -835,7 +839,6 @@ function Novier:CreateWindow(windowTitle)
 
                 SubTabSystem.SubTabs[subName] = SubTab
 
-                -- Auto-select the first one created
                 if not SubTabSystem.ActiveSubTab then
                     activateSubTab()
                 end
@@ -843,7 +846,6 @@ function Novier:CreateWindow(windowTitle)
                 return SubTab
             end
 
-            -- Method to remove a subtab dynamically
             function SubTabSystem:RemoveSubTab(subName)
                 local sub = SubTabSystem.SubTabs[subName]
                 if sub then
@@ -863,7 +865,6 @@ function Novier:CreateWindow(windowTitle)
                 end
             end
 
-            -- Method to clear all sub-tabs at once
             function SubTabSystem:ClearSubTabs()
                 for name, sub in pairs(SubTabSystem.SubTabs) do
                     sub.Button:Destroy()
@@ -873,7 +874,6 @@ function Novier:CreateWindow(windowTitle)
                 SubTabSystem.ActiveSubTab = nil
             end
 
-            -- Populate initial list if supplied
             if type(initialList) == "table" then
                 for _, item in ipairs(initialList) do
                     if type(item) == "table" then
