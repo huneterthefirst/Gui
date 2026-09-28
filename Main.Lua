@@ -1,10 +1,11 @@
 --[[
-    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.3 EXPANDED EDITION)
-    - Full-Screen Real-Time Falling Lua Bytecode & Syntax Stream (Background ZIndex = 1)
-    - Massive High-Capacity Drawer: 840x560 workspace with infinite auto-scrolling
-    - Robust Scroll Architecture: Auto-adjusting canvas bounding for unlimited buttons/sections
-    - High-Contrast OLED Visuals & 16-Band Audio Synth Capsule
-    - Default Global Toggle: [RightControl]
+    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.5 BEAT-SYNC CAMERA EDITION)
+    - Beat-Synchronized Audio FOV Pulsing: Camera kicks with bass & amplitude
+    - Hardcoded Global Toggle for Beat FOV: [RightAlt]
+    - Hardcoded Global Toggle for Island UI: [RightControl]
+    - Mirrored Dual Edge-Screen Beat Pulse Wings (Left & Right)
+    - Full-Screen Real-Time Falling Lua Bytecode Matrix
+    - High-Capacity 840x560 Auto-Scrolling Drawer
 ]]
 
 local Novier = {}
@@ -18,11 +19,13 @@ local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local SoundService = game:GetService("SoundService")
 local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 
 -- Palette
-Novier.Version = "4.3.0 EXPANDED"
+Novier.Version = "4.5.0 BEAT-FOV"
 
 Novier.Theme = {
     PillBackground   = Color3.fromRGB(12, 14, 19),
@@ -32,6 +35,7 @@ Novier.Theme = {
     
     Accent           = Color3.fromRGB(0, 255, 170),
     AccentGlow       = Color3.fromRGB(0, 255, 230),
+    SecondaryAccent  = Color3.fromRGB(255, 0, 110),
     
     TextPrimary      = Color3.fromRGB(255, 255, 255),
     TextSecondary    = Color3.fromRGB(180, 195, 210),
@@ -54,10 +58,19 @@ Novier.Config = {
     PillHeight       = 46,
     DrawerWidth      = 840,
     DrawerHeight     = 560,
-    DefaultToggleKey = Enum.KeyCode.RightControl
+    DefaultToggleKey = Enum.KeyCode.RightControl,
+    DefaultFovKey    = Enum.KeyCode.RightAlt
 }
 
 Novier._Connections = {}
+
+-- Camera FOV State
+Novier.FOVConfig = {
+    Enabled       = false,
+    BaseFOV       = 70,
+    MaxKick       = 24,       -- Max degrees added on loud beat
+    Smoothness    = 0.18      -- Lerp smoothing speed
+}
 
 -- Utility helpers
 local function create(className, properties, children)
@@ -95,7 +108,7 @@ local function getGuiContainer()
 end
 
 --========================================================--
--- FULL SCREEN LUA CODE-RAIN BACKGROUND CANVAS
+-- FULL-SCREEN LUA CODE-RAIN BACKGROUND CANVAS
 --========================================================--
 local function buildFullScreenMatrix(screenGui)
     local RainCanvas = create("Frame", {
@@ -108,7 +121,6 @@ local function buildFullScreenMatrix(screenGui)
         Parent = screenGui
     })
 
-    -- Real Lua snippets, operators & hex memory addresses
     local luaSnippets = {
         "local function exec(addr)", "setreadonly(mt, false)", "bit32.bxor(a, b)",
         "task.spawn(function()", "os.clock() - tick()", "getrawmetatable(game)",
@@ -136,9 +148,7 @@ local function buildFullScreenMatrix(screenGui)
         })
 
         local stream = ""
-        for _ = 1, 35 do
-            stream = stream .. luaSnippets[math.random(1, #luaSnippets)] .. "\n"
-        end
+        for _ = 1, 35 do stream = stream .. luaSnippets[math.random(1, #luaSnippets)] .. "\n" end
         colLabel.Text = stream
 
         local fallSpeed = math.random(16, 32)
@@ -194,7 +204,7 @@ local function buildScreenHUD(screenGui)
         return frame
     end
 
-    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: EXPANDED]\n│ SYNTH: 60 FPS ACTIVE")
+    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: BEAT-SYNC]\n│ FOV PUNCH: [RightAlt]")
     makeBracket(Vector2.new(1, 0), UDim2.new(1, -14, 0, 14), "[NOVIER // ZERO-DAY] ──┐\nSTATUS: RUNNING │")
     local bl = makeBracket(Vector2.new(0, 1), UDim2.new(0, 14, 1, -14), "│ POS: SCANNING...\n└── [TELEMETRY]")
 
@@ -204,10 +214,123 @@ local function buildScreenHUD(screenGui)
             local pos = char.HumanoidRootPart.Position
             local label = bl:FindFirstChildOfClass("TextLabel")
             if label then
-                label.Text = string.format("│ POS: %.1f, %.1f, %.1f\n└── [NOVIER v%s]", pos.X, pos.Y, pos.Z, Novier.Version)
+                label.Text = string.format("│ POS: %.1f, %.1f, %.1f\n└── [BEAT FOV: %s]", pos.X, pos.Y, pos.Z, Novier.FOVConfig.Enabled and "ON" or "OFF")
             end
         end
     end))
+end
+
+--========================================================--
+-- DUAL EDGE-SCREEN BEAT PULSE WINGS
+--========================================================--
+local function buildEdgePulseWings(screenGui)
+    local PulseContainer = create("Frame", {
+        Name = "EdgePulseWings",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        ZIndex = 4,
+        Active = false,
+        Parent = screenGui
+    })
+
+    local LeftWing = create("Frame", {
+        Name = "LeftWing",
+        Size = UDim2.new(0, 60, 0.45, 0),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundTransparency = 1,
+        ZIndex = 4,
+        Parent = PulseContainer
+    }, {
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            HorizontalAlignment = Enum.HorizontalAlignment.Left,
+            Padding = UDim.new(0, 4)
+        })
+    })
+
+    local RightWing = create("Frame", {
+        Name = "RightWing",
+        Size = UDim2.new(0, 60, 0.45, 0),
+        Position = UDim2.new(1, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundTransparency = 1,
+        ZIndex = 4,
+        Parent = PulseContainer
+    }, {
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            Padding = UDim.new(0, 4)
+        })
+    })
+
+    local LeftGlow = create("Frame", {
+        Size = UDim2.new(0, 16, 0.55, 0),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0, 0.5),
+        BackgroundColor3 = Novier.Theme.Accent,
+        BackgroundTransparency = 0.95,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = PulseContainer
+    }, {
+        create("UIGradient", {
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.3),
+                NumberSequenceKeypoint.new(1, 1)
+            })
+        })
+    })
+
+    local RightGlow = create("Frame", {
+        Size = UDim2.new(0, 16, 0.55, 0),
+        Position = UDim2.new(1, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(1, 0.5),
+        BackgroundColor3 = Novier.Theme.Accent,
+        BackgroundTransparency = 0.95,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = PulseContainer
+    }, {
+        create("UIGradient", {
+            Rotation = 180,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.3),
+                NumberSequenceKeypoint.new(1, 1)
+            })
+        })
+    })
+
+    local LeftBars, RightBars = {}, {}
+    for _ = 1, 12 do
+        local lBar = create("Frame", {
+            Size = UDim2.fromOffset(4, 4),
+            BackgroundColor3 = Novier.Theme.Accent,
+            BorderSizePixel = 0,
+            ZIndex = 5,
+            Parent = LeftWing
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        table.insert(LeftBars, lBar)
+
+        local rBar = create("Frame", {
+            Size = UDim2.fromOffset(4, 4),
+            BackgroundColor3 = Novier.Theme.Accent,
+            BorderSizePixel = 0,
+            ZIndex = 5,
+            Parent = RightWing
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        table.insert(RightBars, rBar)
+    end
+
+    return {
+        LeftBars = LeftBars,
+        RightBars = RightBars,
+        LeftGlow = LeftGlow,
+        RightGlow = RightGlow
+    }
 end
 
 --========================================================--
@@ -222,6 +345,7 @@ function Novier:CreateWindow(windowTitle)
     Window.IsOpen = true
     Window.DrawerOpen = false
     Window.ToggleKey = Novier.Config.DefaultToggleKey
+    Window.FovKey = Novier.Config.DefaultFovKey
 
     local Gui = create("ScreenGui", {
         Name = "Novier_Pill_Island",
@@ -234,6 +358,7 @@ function Novier:CreateWindow(windowTitle)
 
     buildFullScreenMatrix(Gui)
     buildScreenHUD(Gui)
+    local EdgeWings = buildEdgePulseWings(Gui)
 
     local OverlayLayer = create("Frame", {
         Name = "OverlayLayer",
@@ -311,11 +436,11 @@ function Novier:CreateWindow(windowTitle)
         Parent = BrandHolder
     })
 
-    -- 16-Band Synth Visualizer in Pill Center
+    -- Center Visualizer
     local VisualizerHolder = create("Frame", {
         Name = "PillVisualizer",
-        Size = UDim2.fromOffset(130, 24),
-        Position = UDim2.new(0.5, -65, 0.5, -12),
+        Size = UDim2.fromOffset(140, 24),
+        Position = UDim2.new(0.5, -70, 0.5, -12),
         BackgroundTransparency = 1,
         ZIndex = 101,
         Parent = Pill
@@ -324,7 +449,7 @@ function Novier:CreateWindow(windowTitle)
             FillDirection = Enum.FillDirection.Horizontal,
             HorizontalAlignment = Enum.HorizontalAlignment.Center,
             VerticalAlignment = Enum.VerticalAlignment.Center,
-            Padding = UDim.new(0, 3)
+            Padding = UDim.new(0, 2)
         })
     })
 
@@ -358,7 +483,7 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    -- EXPANDED FLOATING DRAWER (Takes Up Balanced Screen Workspace)
+    -- Drawer
     local drawerOpenPos = UDim2.new(0.5, 0, 0, 72)
     local drawerClosePos = UDim2.new(0.5, 0, 0, 45)
 
@@ -395,23 +520,72 @@ function Novier:CreateWindow(windowTitle)
     })
     Window.Sound = ActiveSound
 
-    -- Visualizer Loop
+    -- FOV Kick & Synth Processing Loop
+    local currentFovOffset = 0
     track(RunService.RenderStepped:Connect(function()
         local isPlaying = ActiveSound.IsPlaying
         local loudness = isPlaying and ActiveSound.PlaybackLoudness or 0
-        local bass = math.clamp(loudness / 350, 0, 1)
+        local bass = math.clamp(loudness / 340, 0, 1)
 
-        if isPlaying and bass > 0.05 then
-            Pill.PillStroke.Color = Novier.Theme.BorderSubtle:Lerp(Novier.Theme.Accent, bass)
-        else
-            Pill.PillStroke.Color = Novier.Theme.Border
+        -- 1. Real-Time Audio FOV Kick
+        if Camera then
+            if Novier.FOVConfig.Enabled and isPlaying then
+                local targetKick = bass * Novier.FOVConfig.MaxKick
+                currentFovOffset = currentFovOffset + (targetKick - currentFovOffset) * Novier.FOVConfig.Smoothness
+                Camera.FieldOfView = Novier.FOVConfig.BaseFOV + currentFovOffset
+            else
+                currentFovOffset = currentFovOffset + (0 - currentFovOffset) * 0.2
+                Camera.FieldOfView = Novier.FOVConfig.BaseFOV + currentFovOffset
+            end
         end
 
+        -- 2. Pulse Edge Glow & Screen Flares
+        if isPlaying and bass > 0.05 then
+            Pill.PillStroke.Color = Novier.Theme.BorderSubtle:Lerp(Novier.Theme.Accent, bass)
+            EdgeWings.LeftGlow.BackgroundTransparency = 0.95 - (bass * 0.4)
+            EdgeWings.RightGlow.BackgroundTransparency = 0.95 - (bass * 0.4)
+            EdgeWings.LeftGlow.Size = UDim2.new(0, math.floor(16 + (bass * 35)), 0.55, 0)
+            EdgeWings.RightGlow.Size = UDim2.new(0, math.floor(16 + (bass * 35)), 0.55, 0)
+        else
+            Pill.PillStroke.Color = Novier.Theme.Border
+            EdgeWings.LeftGlow.BackgroundTransparency = 0.95
+            EdgeWings.RightGlow.BackgroundTransparency = 0.95
+            EdgeWings.LeftGlow.Size = UDim2.new(0, 16, 0.55, 0)
+            EdgeWings.RightGlow.Size = UDim2.new(0, 16, 0.55, 0)
+        end
+
+        -- 3. Edge Wings (12 Bands)
+        for idx = 1, 12 do
+            local lBar = EdgeWings.LeftBars[idx]
+            local rBar = EdgeWings.RightBars[idx]
+            local width = 4
+            local clr = Novier.Theme.Accent
+
+            if isPlaying then
+                local freqFactor = (13 - idx) / 12
+                local wave = math.sin((os.clock() * 10) + (idx * 0.5))
+                local norm = math.clamp((loudness / 350) * freqFactor * (0.6 + (0.4 * wave)), 0.05, 1)
+                width = math.floor(norm * 55)
+
+                if norm > 0.65 then clr = Novier.Theme.AccentGlow
+                elseif norm > 0.85 then clr = Novier.Theme.SecondaryAccent end
+            end
+
+            lBar.Size = UDim2.fromOffset(math.max(4, width), 4)
+            rBar.Size = UDim2.fromOffset(math.max(4, width), 4)
+            lBar.BackgroundColor3 = clr
+            rBar.BackgroundColor3 = clr
+        end
+
+        -- 4. Pill Waveform (16 Bands)
+        local centerIndex = 8.5
         for idx, bar in ipairs(VisualizerBars) do
             local height = 3
             if isPlaying then
-                local wave = math.sin((os.clock() * 8) + (idx * 0.45))
-                height = math.floor(math.clamp((loudness / 380) * (0.6 + (0.4 * wave)), 0.1, 1) * 22)
+                local distFromCenter = math.abs(idx - centerIndex) / 7.5
+                local wave = math.sin((os.clock() * 9) + (idx * 0.4))
+                local curve = (1 - (distFromCenter * 0.45))
+                height = math.floor(math.clamp((loudness / 380) * curve * (0.6 + (0.4 * wave)), 0.1, 1) * 24)
             end
             bar.Size = UDim2.fromOffset(3, math.max(3, height))
             bar.BackgroundColor3 = (idx % 2 == 0) and Novier.Theme.Accent or Novier.Theme.AccentGlow
@@ -423,11 +597,15 @@ function Novier:CreateWindow(windowTitle)
         Window.IsOpen = (state ~= nil) and state or (not Window.IsOpen)
         if Window.IsOpen then
             Pill.Visible = true
+            EdgeWings.LeftGlow.Visible = true
+            EdgeWings.RightGlow.Visible = true
             tween(Pill, { Position = pillOpenPos }, 0.28)
         else
             tween(Pill, { Position = pillClosePos }, 0.22).Completed:Connect(function()
                 if not Window.IsOpen then Pill.Visible = false end
             end)
+            EdgeWings.LeftGlow.Visible = false
+            EdgeWings.RightGlow.Visible = false
             Window:CloseDrawer()
         end
     end
@@ -450,10 +628,15 @@ function Novier:CreateWindow(windowTitle)
         end)
     end
 
-    -- Default Toggle Keybind
+    -- Toggle Hotkeys: UI on [RightControl], Beat-FOV on [RightAlt]
     track(UserInputService.InputBegan:Connect(function(input, processed)
-        if not processed and input.KeyCode == Window.ToggleKey then
-            Window:SetVisible()
+        if not processed then
+            if input.KeyCode == Window.ToggleKey then
+                Window:SetVisible()
+            elseif input.KeyCode == Window.FovKey then
+                Novier.FOVConfig.Enabled = not Novier.FOVConfig.Enabled
+                Novier:Notify("Beat FOV", Novier.FOVConfig.Enabled and "Camera Kick Activated." or "Camera Kick Deactivated.", 2, Novier.FOVConfig.Enabled and "Success" or "Warning")
+            end
         end
     end))
 
@@ -482,7 +665,6 @@ function Novier:CreateWindow(windowTitle)
             create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) })
         })
 
-        -- Auto-Scrolling Page with Canvas Recalculation
         local Page = create("ScrollingFrame", {
             Name = tabName .. "_Page",
             Size = UDim2.fromScale(1, 1),
@@ -505,7 +687,6 @@ function Novier:CreateWindow(windowTitle)
             })
         })
 
-        -- Dynamic Infinite Scroll Sizing
         Page.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             Page.CanvasSize = UDim2.fromOffset(0, Page.UIListLayout.AbsoluteContentSize.Y + 24)
         end)
@@ -558,7 +739,6 @@ function Novier:CreateWindow(windowTitle)
                 })
             })
 
-            -- Header with dynamic item counter listener
             create("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 18),
                 BackgroundTransparency = 1,
@@ -599,17 +779,11 @@ function Novier:CreateWindow(windowTitle)
                     create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
                 })
 
-                track(Btn.MouseEnter:Connect(function()
-                    tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceElevated, TextColor3 = Novier.Theme.Accent }, 0.12)
-                end))
-                track(Btn.MouseLeave:Connect(function()
-                    tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12)
-                end))
+                track(Btn.MouseEnter:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceElevated, TextColor3 = Novier.Theme.Accent }, 0.12) end))
+                track(Btn.MouseLeave:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
                 track(Btn.MouseButton1Click:Connect(function()
                     tween(Btn, { BackgroundColor3 = Novier.Theme.Accent, TextColor3 = Color3.fromRGB(0, 0, 0) }, 0.08)
-                    task.delay(0.1, function()
-                        tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12)
-                    end)
+                    task.delay(0.1, function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end)
                     if callback then callback() end
                 end))
                 return Btn
@@ -975,7 +1149,7 @@ function Novier:CreateWindow(windowTitle)
                     TermScroll.CanvasPosition = Vector2.new(0, TermScroll.CanvasSize.Y.Offset)
                 end
 
-                append("DYNAMIC PILL ENGINE EXPANDED READY.", Novier.Theme.Accent)
+                append("NOVIER CAMERA & AUDIO ENGINE READY.", Novier.Theme.Accent)
 
                 return {
                     Log = function(_, m) append(m, Novier.Theme.TextTerminal) end,
@@ -994,7 +1168,7 @@ function Novier:CreateWindow(windowTitle)
         return Tab
     end
 
-    -- Media Suite
+    -- Dedicated Audio & Media Suite
     function Window:CreateMediaSuite(defaultTrackTable)
         local tracks = defaultTrackTable or {
             ["Synth Loop"]        = "rbxassetid://9043887091",
@@ -1021,6 +1195,25 @@ function Novier:CreateWindow(windowTitle)
 
         MediaSec:CreateSlider("Master Volume", 0, 200, 50, 1, function(val)
             ActiveSound.Volume = val / 100
+        end)
+
+        -- Beat FOV Controls Inside Media Suite
+        local FovSec = MediaTab:CreateSection("Beat-Synchronized Camera FOV")
+        
+        FovSec:CreateToggle("Audio Beat FOV (Toggle: [RightAlt])", Novier.FOVConfig.Enabled, function(active)
+            Novier.FOVConfig.Enabled = active
+            Novier:Notify("Camera Engine", active and "Beat FOV Kick Enabled." or "Beat FOV Disabled.", 2, active and "Success" or "Warning")
+        end)
+
+        FovSec:CreateSlider("Base FOV", 50, 110, Novier.FOVConfig.BaseFOV, 1, function(val)
+            Novier.FOVConfig.BaseFOV = val
+            if not Novier.FOVConfig.Enabled and Camera then
+                Camera.FieldOfView = val
+            end
+        end)
+
+        FovSec:CreateSlider("Beat Kick Intensity", 5, 45, Novier.FOVConfig.MaxKick, 1, function(val)
+            Novier.FOVConfig.MaxKick = val
         end)
 
         local CustomSec = MediaTab:CreateSection("Custom Sound ID")
@@ -1124,6 +1317,7 @@ function Novier:Destroy()
     table.clear(Novier._Connections)
     local s = SoundService:FindFirstChild("NovierAudioStream")
     if s then s:Destroy() end
+    if Camera then Camera.FieldOfView = Novier.FOVConfig.BaseFOV end
     if Novier._Gui then Novier._Gui:Destroy(); Novier._Gui = nil end
 end
 
