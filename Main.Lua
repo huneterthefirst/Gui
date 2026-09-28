@@ -1,11 +1,11 @@
 --[[
-    NOVIER // CYBERPUNK V3 ENGINE
-    - Animated Matrix / Cyber-Rain Canvas & Scanlines
+    NOVIER // CYBERPUNK V3 ENGINE (FULL REVISED SOURCE)
+    - Animated Matrix Code-Rain Canvas & Scanline Vignette
     - 16-Band Real-Time Audio Spectrum Visualizer
-    - Media Controller (Custom Asset IDs, Preset Tracklist, Live Volume)
-    - Live Performance Telemetry (FPS Graph, Ping, Memory, Uptime)
-    - Interactive Embedded Cyber Terminal / Command Stream
-    - Fully Modular Tabs, Sections, ColorPickers, Multi-Dropdowns, Sliders
+    - Integrated Media Controller (Verified Audio IDs, Custom ID Loader, Volume)
+    - Live Performance Telemetry (FPS, Ping, Memory Usage, Uptime)
+    - Interactive Embedded Terminal / Console Logging System
+    - Dynamic Popout Layering (No ClipsDescendants Clipping on Dropdowns)
 ]]
 
 local Novier = {}
@@ -35,11 +35,10 @@ Novier.Theme = {
     SurfaceElevated  = Color3.fromRGB(22, 26, 38),
     SurfaceHighlight = Color3.fromRGB(30, 36, 54),
 
-    -- Cyberpunk Neon Accents
-    Accent           = Color3.fromRGB(0, 255, 170),      -- Cyber Mint / Toxic Green
+    Accent           = Color3.fromRGB(0, 255, 170),      -- Cyber Mint
     AccentGlow       = Color3.fromRGB(0, 255, 230),      -- Neon Cyan
     AccentDark       = Color3.fromRGB(0, 80, 55),
-    SecondaryAccent  = Color3.fromRGB(255, 0, 120),      -- Synthwave Magenta
+    SecondaryAccent  = Color3.fromRGB(255, 0, 120),
 
     TextPrimary      = Color3.fromRGB(240, 255, 250),
     TextSecondary    = Color3.fromRGB(140, 160, 175),
@@ -65,7 +64,6 @@ Novier.Config = {
 }
 
 Novier._Connections = {}
-Novier._ThemeListeners = {}
 Novier._ActiveDropdown = nil
 
 --========================================================--
@@ -149,7 +147,7 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    -- Ambient Neon Backlight / Shadow
+    -- Ambient Glow / Shadow
     local Backlight = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
@@ -176,7 +174,6 @@ function Novier:CreateWindow(windowTitle)
         Parent = Main
     })
 
-    -- Animated rain columns
     local hexChars = {"0","1","A","F","7","X","9","C","K","0x","//",">","§"}
     local columns = 18
     for i = 1, columns do
@@ -195,14 +192,12 @@ function Novier:CreateWindow(windowTitle)
             Parent = MatrixCanvas
         })
 
-        -- Populate initial stream
         local streamText = ""
-        for j = 1, 35 do
+        for _ = 1, 35 do
             streamText = streamText .. hexChars[math.random(1, #hexChars)] .. "\n"
         end
         colLabel.Text = streamText
 
-        -- Loop scrolling
         local fallSpeed = math.random(12, 28)
         task.spawn(function()
             while colLabel.Parent do
@@ -216,7 +211,7 @@ function Novier:CreateWindow(windowTitle)
         end)
     end
 
-    -- Darkening Vignette Layer over Matrix Canvas
+    -- Darkening Overlay
     create("Frame", {
         Size = UDim2.fromScale(1, 1),
         BackgroundColor3 = Novier.Theme.Background,
@@ -226,7 +221,7 @@ function Novier:CreateWindow(windowTitle)
     })
 
     --====================================================--
-    -- TOPBAR & LIVE AUDIO SPECTRUM VISUALIZER
+    -- TOPBAR & VISUALIZER
     --====================================================--
     local Topbar = create("Frame", {
         Name = "Topbar",
@@ -246,7 +241,7 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    local LogoBadge = create("TextLabel", {
+    create("TextLabel", {
         Size = UDim2.fromOffset(28, 28),
         Position = UDim2.fromOffset(12, 10),
         BackgroundColor3 = Novier.Theme.SurfaceElevated,
@@ -261,7 +256,7 @@ function Novier:CreateWindow(windowTitle)
         create("UIStroke", { Thickness = 1, Color = Novier.Theme.Accent })
     })
 
-    local TitleLabel = create("TextLabel", {
+    create("TextLabel", {
         Size = UDim2.new(0, 200, 1, 0),
         Position = UDim2.fromOffset(48, 0),
         BackgroundTransparency = 1,
@@ -274,7 +269,7 @@ function Novier:CreateWindow(windowTitle)
         Parent = Topbar
     })
 
-    -- Real-Time Audio Visualizer Bars
+    -- 16-Band Visualizer
     local VisualizerHolder = create("Frame", {
         Name = "VisualizerHolder",
         Size = UDim2.fromOffset(140, 22),
@@ -292,8 +287,7 @@ function Novier:CreateWindow(windowTitle)
     })
 
     local VisualizerBars = {}
-    local numBands = 16
-    for i = 1, numBands do
+    for _ = 1, 16 do
         local bar = create("Frame", {
             Size = UDim2.fromOffset(4, 4),
             BackgroundColor3 = Novier.Theme.Accent,
@@ -306,7 +300,6 @@ function Novier:CreateWindow(windowTitle)
         table.insert(VisualizerBars, bar)
     end
 
-    -- Window Controls
     local WindowControls = create("Frame", {
         Size = UDim2.fromOffset(70, 48),
         Position = UDim2.new(1, -78, 0, 0),
@@ -360,7 +353,7 @@ function Novier:CreateWindow(windowTitle)
         Novier:Destroy()
     end)
 
-    -- Window Dragging System
+    -- Window Dragging
     local isDragging, dragStart, startPos = false, nil, nil
     track(Topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -389,25 +382,22 @@ function Novier:CreateWindow(windowTitle)
     end))
 
     --====================================================--
-    -- AUDIO SYSTEM & BACKGROUND SOUND ENGINE
+    -- AUDIO SYSTEM & REACTIVE LOOP
     --====================================================--
     local ActiveSound = create("Sound", {
         Name = "NovierAudioStream",
         Volume = 0.5,
         Looped = true,
-        SoundId = "rbxassetid://1843528800", -- Default Cyber Theme
+        SoundId = "rbxassetid://9043887091",
         Parent = SoundService
     })
-
     Window.Sound = ActiveSound
 
-    -- Dynamic Visualizer Update & Bass Pulse Loop
     track(RunService.RenderStepped:Connect(function()
         local isPlaying = ActiveSound.IsPlaying
         local pLoudness = isPlaying and ActiveSound.PlaybackLoudness or 0
         local bassFactor = math.clamp(pLoudness / 350, 0, 1)
 
-        -- Audio-reactive border pulsing
         if isPlaying and bassFactor > 0.05 then
             Main.ShellStroke.Color = Novier.Theme.BorderSubtle:Lerp(Novier.Theme.Accent, bassFactor)
             Backlight.ImageTransparency = 0.88 - (bassFactor * 0.3)
@@ -416,7 +406,6 @@ function Novier:CreateWindow(windowTitle)
             Backlight.ImageTransparency = 0.88
         end
 
-        -- Update 16-band bars
         for idx, bar in ipairs(VisualizerBars) do
             local height
             if isPlaying then
@@ -432,7 +421,7 @@ function Novier:CreateWindow(windowTitle)
     end))
 
     --====================================================--
-    -- BODY & NAVIGATION (SIDEBAR + CONTENT)
+    -- BODY & LAYOUT
     --====================================================--
     local Body = create("Frame", {
         Name = "Body",
@@ -500,9 +489,7 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    --====================================================--
-    -- FOOTER TELEMETRY HUD (FPS, PING, MEMORY, UPTIME)
-    --====================================================--
+    -- Footer HUD
     local FooterHUD = create("Frame", {
         Name = "FooterHUD",
         Size = UDim2.new(1, 0, 0, 26),
@@ -536,7 +523,6 @@ function Novier:CreateWindow(windowTitle)
         Parent = FooterHUD
     })
 
-    -- Telemetry loop
     local frameCount = 0
     local lastFpsUpdate = os.clock()
     local liveFps = 60
@@ -565,7 +551,7 @@ function Novier:CreateWindow(windowTitle)
     end))
 
     --====================================================--
-    -- TAB CONSTRUCTOR
+    -- TABS & SECTIONS
     --====================================================--
     function Window:CreateTab(tabName, iconSymbol)
         local Tab = {}
@@ -668,9 +654,7 @@ function Novier:CreateWindow(windowTitle)
         table.insert(Window.Tabs, Tab)
         if #Window.Tabs == 1 then activate() end
 
-        --====================================================--
-        -- SECTIONS
-        --====================================================--
+        -- Create Section
         function Tab:CreateSection(sectionName)
             local Section = {}
 
@@ -691,7 +675,7 @@ function Novier:CreateWindow(windowTitle)
                 })
             })
 
-            local Header = create("TextLabel", {
+            create("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 16),
                 BackgroundTransparency = 1,
                 Text = "// " .. string.upper(sectionName),
@@ -703,6 +687,7 @@ function Novier:CreateWindow(windowTitle)
             })
 
             local ControlsHolder = create("Frame", {
+                Name = "ControlsHolder",
                 Size = UDim2.new(1, 0, 0, 0),
                 Position = UDim2.fromOffset(0, 22),
                 AutomaticSize = Enum.AutomaticSize.Y,
@@ -714,6 +699,10 @@ function Novier:CreateWindow(windowTitle)
                     SortOrder = Enum.SortOrder.LayoutOrder
                 })
             })
+
+            -- Expose actual Instances so components parent properly
+            Section.Box = Box
+            Section.ControlsHolder = ControlsHolder
 
             -- Button
             function Section:CreateButton(name, callback)
@@ -753,7 +742,7 @@ function Novier:CreateWindow(windowTitle)
                 return Btn
             end
 
-            -- Toggle (Cyber Switch)
+            -- Toggle
             function Section:CreateToggle(name, default, callback)
                 local state = default or false
 
@@ -764,7 +753,7 @@ function Novier:CreateWindow(windowTitle)
                     Parent = ControlsHolder
                 })
 
-                local Lbl = create("TextLabel", {
+                create("TextLabel", {
                     Size = UDim2.new(1, -60, 1, 0),
                     BackgroundTransparency = 1,
                     Text = name,
@@ -811,7 +800,7 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Precision Cyber Slider
+            -- Slider
             function Section:CreateSlider(name, min, max, default, step, callback)
                 min = min or 0
                 max = max or 100
@@ -824,7 +813,7 @@ function Novier:CreateWindow(windowTitle)
                     Parent = ControlsHolder
                 })
 
-                local NameLbl = create("TextLabel", {
+                create("TextLabel", {
                     Size = UDim2.new(0.7, 0, 0, 18),
                     BackgroundTransparency = 1,
                     Text = name,
@@ -918,7 +907,43 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Overlay Dropdown (Unclipped)
+            -- Textbox
+            function Section:CreateTextbox(name, placeholder, clearOnFocus, callback)
+                local BoxFrame = create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 34),
+                    BackgroundColor3 = Novier.Theme.SurfaceElevated,
+                    Parent = ControlsHolder
+                }, {
+                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
+                })
+
+                local Input = create("TextBox", {
+                    Size = UDim2.new(1, -20, 1, 0),
+                    Position = UDim2.fromOffset(10, 0),
+                    BackgroundTransparency = 1,
+                    PlaceholderText = placeholder or "Type input...",
+                    PlaceholderColor3 = Novier.Theme.TextDisabled,
+                    Text = "",
+                    Font = Novier.Config.FontNormal,
+                    TextSize = 12,
+                    TextColor3 = Novier.Theme.TextPrimary,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    ClearTextOnFocus = clearOnFocus or false,
+                    Parent = BoxFrame
+                })
+
+                track(Input.FocusLost:Connect(function(enterPressed)
+                    if callback then callback(Input.Text, enterPressed) end
+                end))
+
+                return {
+                    Set = function(_, text) Input.Text = text end,
+                    Get = function() return Input.Text end
+                }
+            end
+
+            -- Dropdown
             function Section:CreateDropdown(name, list, default, callback)
                 local selected = default or list[1]
                 local isOpen = false
@@ -935,7 +960,7 @@ function Novier:CreateWindow(windowTitle)
                     create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) })
                 })
 
-                local NameLbl = create("TextLabel", {
+                create("TextLabel", {
                     Size = UDim2.fromScale(0.5, 1),
                     BackgroundTransparency = 1,
                     Text = name,
@@ -1058,7 +1083,7 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Interactive In-Window Cyber Console / Terminal
+            -- Terminal Widget
             function Section:CreateTerminal(height)
                 local TermFrame = create("Frame", {
                     Size = UDim2.new(1, 0, 0, height or 130),
@@ -1087,7 +1112,7 @@ function Novier:CreateWindow(windowTitle)
                 })
 
                 local function append(msg, color)
-                    local line = create("TextLabel", {
+                    create("TextLabel", {
                         Size = UDim2.new(1, 0, 0, 14),
                         BackgroundTransparency = 1,
                         Text = string.format("[%s] > %s", os.date("%X"), tostring(msg)),
@@ -1101,7 +1126,7 @@ function Novier:CreateWindow(windowTitle)
                     TermScroll.CanvasPosition = Vector2.new(0, TermScroll.CanvasSize.Y.Offset)
                 end
 
-                append("NOVIER CYBER-TERMINAL READY.", Novier.Theme.Accent)
+                append("NOVIER CYBER-TERMINAL ONLINE.", Novier.Theme.Accent)
 
                 return {
                     Log = function(_, msg) append(msg, Novier.Theme.TextTerminal) end,
@@ -1123,23 +1148,23 @@ function Novier:CreateWindow(windowTitle)
     end
 
     --====================================================--
-    -- BUILT-IN MEDIA CONTROLLER COMPONENT
+    -- MEDIA SUITE (FIXED INSTANCE HIERARCHY)
     --====================================================--
     function Window:CreateMediaSuite(defaultTrackTable)
         local tracks = defaultTrackTable or {
-            ["Cyberpunk Synth"] = "rbxassetid://1843528800",
-            ["Phonk Drift"]      = "rbxassetid://9043887091",
-            ["Neo Tokyo Lo-Fi"]  = "rbxassetid://9048375035",
-            ["Club Bass Boom"]   = "rbxassetid://1845554017"
+            ["Synth Loop"]        = "rbxassetid://9043887091",
+            ["Action Electronic"] = "rbxassetid://1840590064",
+            ["Dark Cyber"]        = "rbxassetid://1843404009"
         }
 
         local MediaTab = Window:CreateTab("MEDIA", "♫")
         local MediaSec = MediaTab:CreateSection("Soundtrack & Visualizer Engine")
 
         local trackNames = {}
-        for name in pairs(tracks) do table.insert(trackNames, name) end
+        for name in pairs(tracks) do 
+            table.insert(trackNames, name) 
+        end
 
-        -- Dropdown selector
         MediaSec:CreateDropdown("Preset Tracklist", trackNames, trackNames[1], function(chosen)
             ActiveSound.SoundId = tracks[chosen]
             ActiveSound.TimePosition = 0
@@ -1147,7 +1172,6 @@ function Novier:CreateWindow(windowTitle)
             Novier:Notify("Audio Driver", "Stream loaded: " .. chosen, 2, "Success")
         end)
 
-        -- Custom Asset ID input
         MediaSec:CreateButton("Toggle Play / Pause", function()
             if ActiveSound.IsPlaying then
                 ActiveSound:Pause()
@@ -1160,39 +1184,54 @@ function Novier:CreateWindow(windowTitle)
             ActiveSound.Volume = val / 100
         end)
 
-        -- Custom Sound ID loader
         local CustomBoxSec = MediaTab:CreateSection("Load Custom Audio ID")
         local TerminalLogger = CustomBoxSec:CreateTerminal(90)
 
-        local InputFrame = create("Frame", {
-            Size = UDim2.new(1, 0, 0, 32),
-            BackgroundColor3 = Novier.Theme.SurfaceElevated,
-            Parent = CustomBoxSec
-        }, {
-            create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-            create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
-        })
-
-        CustomBoxSec:CreateButton("Load Custom Roblox Asset ID", function()
-            -- Example prompt hook
-            TerminalLogger:Log("Enter numeric ID into script or load directly.")
+        CustomBoxSec:CreateTextbox("Audio ID", "Paste numeric Sound ID here...", false, function(txt, enter)
+            if enter and txt and #txt > 0 then
+                local cleanId = txt:gsub("%D", "")
+                if #cleanId > 0 then
+                    local formatted = "rbxassetid://" .. cleanId
+                    ActiveSound.SoundId = formatted
+                    ActiveSound.TimePosition = 0
+                    ActiveSound:Play()
+                    TerminalLogger:Log("Mounted Sound: " .. formatted)
+                    Novier:Notify("Audio System", "Playing ID: " .. cleanId, 3, "Success")
+                else
+                    TerminalLogger:Error("Invalid numeric Sound ID entered.")
+                end
+            end
         end)
 
         return {
             PlayCustom = function(_, soundId)
-                local formatted = string.find(soundId, "rbxassetid://") and soundId or ("rbxassetid://" .. soundId)
+                local cleanId = tostring(soundId):gsub("%D", "")
+                local formatted = "rbxassetid://" .. cleanId
                 ActiveSound.SoundId = formatted
+                ActiveSound.TimePosition = 0
                 ActiveSound:Play()
                 TerminalLogger:Log("Mounted Sound: " .. formatted)
             end
         }
     end
 
+    -- Initial Entry Animation
+    Main.Size = UDim2.fromOffset(0, 0)
+    tween(Main, { Size = UDim2.fromOffset(Novier.Config.DefaultWidth, Novier.Config.DefaultHeight) }, 0.35, Enum.EasingStyle.Back)
+
+    function Window:SetVisible(state)
+        Gui.Enabled = state
+    end
+
+    function Window:GetVisible()
+        return Gui.Enabled
+    end
+
     return Window
 end
 
 --========================================================--
--- TOAST NOTIFICATIONS
+-- NOTIFICATIONS
 --========================================================--
 function Novier:Notify(title, message, duration, kind)
     if not Novier._Gui then return end
@@ -1215,7 +1254,10 @@ function Novier:Notify(title, message, duration, kind)
         })
     end
 
-    local edgeColor = (kind == "Success" and Novier.Theme.Success) or (kind == "Warning" and Novier.Theme.Warning) or (kind == "Error" and Novier.Theme.Error) or Novier.Theme.Accent
+    local edgeColor = (kind == "Success" and Novier.Theme.Success) 
+                   or (kind == "Warning" and Novier.Theme.Warning) 
+                   or (kind == "Error" and Novier.Theme.Error) 
+                   or Novier.Theme.Accent
 
     local Card = create("Frame", {
         Size = UDim2.new(1, 0, 0, 58),
