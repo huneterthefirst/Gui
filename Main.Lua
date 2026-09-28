@@ -1,19 +1,11 @@
---[[
-    NOVIER // CYBERPUNK V3 ENGINE (FULL REVISED SOURCE)
-    - Animated Matrix Code-Rain Canvas & Scanline Vignette
-    - 16-Band Real-Time Audio Spectrum Visualizer
-    - Integrated Media Controller (Verified Audio IDs, Custom ID Loader, Volume)
-    - Live Performance Telemetry (FPS, Ping, Memory Usage, Uptime)
-    - Interactive Embedded Terminal / Console Logging System
-    - Dynamic Popout Layering (No ClipsDescendants Clipping on Dropdowns)
-]]
+--========================================================--
+-- NOVIER // CYBERPUNK V3 ENGINE (ALL-IN-ONE STANDALONE)
+--========================================================--
 
 local Novier = {}
 Novier.__index = Novier
 
---========================================================--
--- SERVICES & DRIVERS
---========================================================--
+-- Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -24,9 +16,7 @@ local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 
---========================================================--
--- PALETTE & CONFIG
---========================================================--
+-- Theme & Palette
 Novier.Version = "3.0.0 CYBER"
 
 Novier.Theme = {
@@ -35,8 +25,8 @@ Novier.Theme = {
     SurfaceElevated  = Color3.fromRGB(22, 26, 38),
     SurfaceHighlight = Color3.fromRGB(30, 36, 54),
 
-    Accent           = Color3.fromRGB(0, 255, 170),      -- Cyber Mint
-    AccentGlow       = Color3.fromRGB(0, 255, 230),      -- Neon Cyan
+    Accent           = Color3.fromRGB(0, 255, 170),
+    AccentGlow       = Color3.fromRGB(0, 255, 230),
     AccentDark       = Color3.fromRGB(0, 80, 55),
     SecondaryAccent  = Color3.fromRGB(255, 0, 120),
 
@@ -66,16 +56,16 @@ Novier.Config = {
 Novier._Connections = {}
 Novier._ActiveDropdown = nil
 
---========================================================--
--- ENGINE UTILITIES
---========================================================--
+-- Safe creation helper
 local function create(className, properties, children)
     local inst = Instance.new(className)
     for prop, val in pairs(properties or {}) do
         inst[prop] = val
     end
     for _, child in ipairs(children or {}) do
-        child.Parent = inst
+        if typeof(child) == "Instance" then
+            child.Parent = inst
+        end
     end
     return inst
 end
@@ -102,7 +92,7 @@ local function getGuiContainer()
 end
 
 --========================================================--
--- WINDOW & MATRIX CORE
+-- WINDOW CONSTRUCTOR
 --========================================================--
 function Novier:CreateWindow(windowTitle)
     if Novier._Gui then Novier:Destroy() end
@@ -127,7 +117,6 @@ function Novier:CreateWindow(windowTitle)
         Parent = Gui
     })
 
-    -- Main Cyber Frame
     local Main = create("Frame", {
         Name = "MainWindow",
         Size = UDim2.fromOffset(Novier.Config.DefaultWidth, Novier.Config.DefaultHeight),
@@ -147,7 +136,6 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    -- Ambient Glow / Shadow
     local Backlight = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
@@ -162,9 +150,7 @@ function Novier:CreateWindow(windowTitle)
         Parent = Main
     })
 
-    --====================================================--
-    -- MATRIX CODE-RAIN BACKGROUND CANVAS
-    --====================================================--
+    -- Matrix Code Rain Canvas
     local MatrixCanvas = create("Frame", {
         Name = "MatrixCanvas",
         Size = UDim2.fromScale(1, 1),
@@ -211,7 +197,6 @@ function Novier:CreateWindow(windowTitle)
         end)
     end
 
-    -- Darkening Overlay
     create("Frame", {
         Size = UDim2.fromScale(1, 1),
         BackgroundColor3 = Novier.Theme.Background,
@@ -220,9 +205,7 @@ function Novier:CreateWindow(windowTitle)
         Parent = Main
     })
 
-    --====================================================--
-    -- TOPBAR & VISUALIZER
-    --====================================================--
+    -- Topbar & Visualizer
     local Topbar = create("Frame", {
         Name = "Topbar",
         Size = UDim2.new(1, 0, 0, 48),
@@ -269,7 +252,6 @@ function Novier:CreateWindow(windowTitle)
         Parent = Topbar
     })
 
-    -- 16-Band Visualizer
     local VisualizerHolder = create("Frame", {
         Name = "VisualizerHolder",
         Size = UDim2.fromOffset(140, 22),
@@ -381,9 +363,7 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    --====================================================--
-    -- AUDIO SYSTEM & REACTIVE LOOP
-    --====================================================--
+    -- Working Sound Track
     local ActiveSound = create("Sound", {
         Name = "NovierAudioStream",
         Volume = 0.5,
@@ -420,9 +400,7 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    --====================================================--
-    -- BODY & LAYOUT
-    --====================================================--
+    -- Main Layout
     local Body = create("Frame", {
         Name = "Body",
         Size = UDim2.new(1, 0, 1, -74),
@@ -489,7 +467,6 @@ function Novier:CreateWindow(windowTitle)
         })
     })
 
-    -- Footer HUD
     local FooterHUD = create("Frame", {
         Name = "FooterHUD",
         Size = UDim2.new(1, 0, 0, 26),
@@ -550,9 +527,7 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
-    --====================================================--
-    -- TABS & SECTIONS
-    --====================================================--
+    -- Tabs & Sections
     function Window:CreateTab(tabName, iconSymbol)
         local Tab = {}
         Tab.Sections = {}
@@ -654,7 +629,6 @@ function Novier:CreateWindow(windowTitle)
         table.insert(Window.Tabs, Tab)
         if #Window.Tabs == 1 then activate() end
 
-        -- Create Section
         function Tab:CreateSection(sectionName)
             local Section = {}
 
@@ -700,11 +674,9 @@ function Novier:CreateWindow(windowTitle)
                 })
             })
 
-            -- Expose actual Instances so components parent properly
             Section.Box = Box
             Section.ControlsHolder = ControlsHolder
 
-            -- Button
             function Section:CreateButton(name, callback)
                 local Btn = create("TextButton", {
                     Size = UDim2.new(1, 0, 0, 32),
@@ -742,7 +714,6 @@ function Novier:CreateWindow(windowTitle)
                 return Btn
             end
 
-            -- Toggle
             function Section:CreateToggle(name, default, callback)
                 local state = default or false
 
@@ -800,7 +771,6 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Slider
             function Section:CreateSlider(name, min, max, default, step, callback)
                 min = min or 0
                 max = max or 100
@@ -907,7 +877,6 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Textbox
             function Section:CreateTextbox(name, placeholder, clearOnFocus, callback)
                 local BoxFrame = create("Frame", {
                     Size = UDim2.new(1, 0, 0, 34),
@@ -943,7 +912,6 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Dropdown
             function Section:CreateDropdown(name, list, default, callback)
                 local selected = default or list[1]
                 local isOpen = false
@@ -1083,7 +1051,6 @@ function Novier:CreateWindow(windowTitle)
                 }
             end
 
-            -- Terminal Widget
             function Section:CreateTerminal(height)
                 local TermFrame = create("Frame", {
                     Size = UDim2.new(1, 0, 0, height or 130),
@@ -1147,9 +1114,7 @@ function Novier:CreateWindow(windowTitle)
         return Tab
     end
 
-    --====================================================--
-    -- MEDIA SUITE (FIXED INSTANCE HIERARCHY)
-    --====================================================--
+    -- Media Suite
     function Window:CreateMediaSuite(defaultTrackTable)
         local tracks = defaultTrackTable or {
             ["Synth Loop"]        = "rbxassetid://9043887091",
@@ -1215,7 +1180,6 @@ function Novier:CreateWindow(windowTitle)
         }
     end
 
-    -- Initial Entry Animation
     Main.Size = UDim2.fromOffset(0, 0)
     tween(Main, { Size = UDim2.fromOffset(Novier.Config.DefaultWidth, Novier.Config.DefaultHeight) }, 0.35, Enum.EasingStyle.Back)
 
@@ -1230,9 +1194,7 @@ function Novier:CreateWindow(windowTitle)
     return Window
 end
 
---========================================================--
--- NOTIFICATIONS
---========================================================--
+-- Notifications
 function Novier:Notify(title, message, duration, kind)
     if not Novier._Gui then return end
 
@@ -1310,9 +1272,6 @@ function Novier:Notify(title, message, duration, kind)
     end)
 end
 
---========================================================--
--- CLEANUP
---========================================================--
 function Novier:Destroy()
     for _, conn in ipairs(Novier._Connections) do
         pcall(function() conn:Disconnect() end)
@@ -1326,4 +1285,75 @@ function Novier:Destroy()
     end
 end
 
-return Novier
+--========================================================--
+-- EXECUTION & UI INITIALIZER
+--========================================================--
+
+local Window = Novier:CreateWindow("NOVIER // ZERO-DAY KERNEL")
+
+-- 1. Initialize Media Suite
+local MediaSuite = Window:CreateMediaSuite({
+    ["Synth Action"]    = "rbxassetid://9043887091",
+    ["Action Drive"]    = "rbxassetid://1840590064",
+    ["Dark Cyber"]      = "rbxassetid://1843404009"
+})
+
+-- 2. Locomotion / Player
+local CombatTab = Window:CreateTab("PLAYER", "⚡")
+local MovementSec = CombatTab:CreateSection("Locomotion Engine")
+
+MovementSec:CreateToggle("Super Jump", false, function(enabled)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Humanoid") then
+        char:FindFirstChildOfClass("Humanoid").UseJumpPower = true
+        char:FindFirstChildOfClass("Humanoid").JumpPower = enabled and 120 or 50
+    end
+end)
+
+MovementSec:CreateSlider("WalkSpeed Velocity", 16, 250, 16, 1, function(val)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Humanoid") then
+        char:FindFirstChildOfClass("Humanoid").WalkSpeed = val
+    end
+end)
+
+MovementSec:CreateButton("Emergency Stop", function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+        Novier:Notify("Physics Engine", "Momentum reset.", 2, "Warning")
+    end
+end)
+
+-- 3. Live Hacker Terminal & Automation Tab
+local TerminalTab = Window:CreateTab("SYS-CONSOLE", ">_")
+local TermSec = TerminalTab:CreateSection("Live Virtual Output")
+local Console = TermSec:CreateTerminal(160)
+
+TermSec:CreateButton("Test Traceback Log", function()
+    Console:Log("Inspecting local thread status...")
+    task.wait(0.2)
+    Console:Warn("Telemetry latency at standard thresholds.")
+    Novier:Notify("Kernel", "Telemetry test finished.", 3, "Success")
+end)
+
+TermSec:CreateButton("Flush Terminal Output", function()
+    Console:Clear()
+end)
+
+-- 4. Environment & Visuals
+local EnvironmentTab = Window:CreateTab("VISUALS", "👁")
+local RenderSec = EnvironmentTab:CreateSection("Target Filtering")
+
+RenderSec:CreateDropdown("Target Filtering", {"Enemies", "Friendlies", "Neutral", "All Entities"}, "Enemies", function(selected)
+    Console:Log("Tracking filter updated: " .. selected)
+end)
+
+RenderSec:CreateTextbox("Filter Tag", "Enter tag name...", false, function(txt, enter)
+    if enter and #txt > 0 then
+        Console:Log("Custom tag appended: " .. txt)
+        Novier:Notify("Filter Pipeline", "Tag registered: " .. txt, 2, "Success")
+    end
+end)
+
+Novier:Notify("Novier Cyber", "Audio visualizer & matrix core online.", 4, "Success")
