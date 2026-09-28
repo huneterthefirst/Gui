@@ -1,7 +1,7 @@
 --[[
-    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.5 BEAT-SYNC CAMERA EDITION)
-    - Beat-Synchronized Audio FOV Pulsing: Camera kicks with bass & amplitude
-    - Hardcoded Global Toggle for Beat FOV: [RightAlt]
+    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE (V4.6 DYNAMIC SUB-TABS EDITION)
+    - Dynamic Sub-Tabs & Segmented Nested Containers (Add/Remove/Clear at runtime)
+    - Beat-Synchronized Audio FOV Pulsing: Camera kicks with bass & amplitude ([RightAlt])
     - Hardcoded Global Toggle for Island UI: [RightControl]
     - Mirrored Dual Edge-Screen Beat Pulse Wings (Left & Right)
     - Full-Screen Real-Time Falling Lua Bytecode Matrix
@@ -25,7 +25,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 -- Palette
-Novier.Version = "4.5.0 BEAT-FOV"
+Novier.Version = "4.6.0 SUB-TABS"
 
 Novier.Theme = {
     PillBackground   = Color3.fromRGB(12, 14, 19),
@@ -68,8 +68,8 @@ Novier._Connections = {}
 Novier.FOVConfig = {
     Enabled       = false,
     BaseFOV       = 70,
-    MaxKick       = 24,       -- Max degrees added on loud beat
-    Smoothness    = 0.18      -- Lerp smoothing speed
+    MaxKick       = 24,
+    Smoothness    = 0.18
 }
 
 -- Utility helpers
@@ -204,7 +204,7 @@ local function buildScreenHUD(screenGui)
         return frame
     end
 
-    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: BEAT-SYNC]\n│ FOV PUNCH: [RightAlt]")
+    makeBracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), "┌── [ISLAND: DYNAMIC]\n│ SUB-TABS: ONLINE")
     makeBracket(Vector2.new(1, 0), UDim2.new(1, -14, 0, 14), "[NOVIER // ZERO-DAY] ──┐\nSTATUS: RUNNING │")
     local bl = makeBracket(Vector2.new(0, 1), UDim2.new(0, 14, 1, -14), "│ POS: SCANNING...\n└── [TELEMETRY]")
 
@@ -527,7 +527,7 @@ function Novier:CreateWindow(windowTitle)
         local loudness = isPlaying and ActiveSound.PlaybackLoudness or 0
         local bass = math.clamp(loudness / 340, 0, 1)
 
-        -- 1. Real-Time Audio FOV Kick
+        -- Audio Beat FOV
         if Camera then
             if Novier.FOVConfig.Enabled and isPlaying then
                 local targetKick = bass * Novier.FOVConfig.MaxKick
@@ -539,7 +539,7 @@ function Novier:CreateWindow(windowTitle)
             end
         end
 
-        -- 2. Pulse Edge Glow & Screen Flares
+        -- Edge Flares
         if isPlaying and bass > 0.05 then
             Pill.PillStroke.Color = Novier.Theme.BorderSubtle:Lerp(Novier.Theme.Accent, bass)
             EdgeWings.LeftGlow.BackgroundTransparency = 0.95 - (bass * 0.4)
@@ -554,7 +554,7 @@ function Novier:CreateWindow(windowTitle)
             EdgeWings.RightGlow.Size = UDim2.new(0, 16, 0.55, 0)
         end
 
-        -- 3. Edge Wings (12 Bands)
+        -- Edge Wings
         for idx = 1, 12 do
             local lBar = EdgeWings.LeftBars[idx]
             local rBar = EdgeWings.RightBars[idx]
@@ -577,7 +577,7 @@ function Novier:CreateWindow(windowTitle)
             rBar.BackgroundColor3 = clr
         end
 
-        -- 4. Pill Waveform (16 Bands)
+        -- Pill Center Waveform
         local centerIndex = 8.5
         for idx, bar in ipairs(VisualizerBars) do
             local height = 3
@@ -628,7 +628,6 @@ function Novier:CreateWindow(windowTitle)
         end)
     end
 
-    -- Toggle Hotkeys: UI on [RightControl], Beat-FOV on [RightAlt]
     track(UserInputService.InputBegan:Connect(function(input, processed)
         if not processed then
             if input.KeyCode == Window.ToggleKey then
@@ -640,8 +639,11 @@ function Novier:CreateWindow(windowTitle)
         end
     end))
 
+    -- Forward declarations for control builders
+    local buildSection
+
     --====================================================--
-    -- TABS (SCROLLING PAGE SYSTEM)
+    -- TABS (MAIN TOP-LEVEL NAVIGATION)
     --====================================================--
     function Window:CreateTab(tabName, iconSymbol)
         local Tab = {}
@@ -715,457 +717,630 @@ function Novier:CreateWindow(windowTitle)
         Tab.Page = Page
         table.insert(Window.Tabs, Tab)
 
-        --====================================================--
-        -- SECTIONS & CONTROLS
-        --====================================================--
+        -- Section creation on a base tab
         function Tab:CreateSection(sectionName)
-            local Section = {}
+            return buildSection(Page, sectionName, OverlayLayer)
+        end
 
-            local Box = create("Frame", {
-                Size = UDim2.new(1, 0, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundColor3 = Novier.Theme.SurfaceElevated,
-                BackgroundTransparency = 0,
+        --====================================================--
+        -- DYNAMIC SUB-TABS BUILDER
+        --====================================================--
+        function Tab:CreateSubTabs(initialList)
+            local SubTabSystem = {}
+            SubTabSystem.SubTabs = {}
+            SubTabSystem.ActiveSubTab = nil
+
+            -- Header Bar for Sub-Tabs
+            local SubTabBar = create("ScrollingFrame", {
+                Name = "SubTabBar",
+                Size = UDim2.new(1, 0, 0, 32),
+                BackgroundTransparency = 1,
+                ScrollBarThickness = 0,
+                CanvasSize = UDim2.new(),
                 ZIndex = 14,
                 Parent = Page
             }, {
-                create("UICorner", { CornerRadius = UDim.new(0, 10) }),
-                create("UIStroke", { Thickness = 1.2, Color = Novier.Theme.BorderSubtle }),
-                create("UIPadding", {
-                    PaddingTop = UDim.new(0, 12),
-                    PaddingBottom = UDim.new(0, 14),
-                    PaddingLeft = UDim.new(0, 14),
-                    PaddingRight = UDim.new(0, 14)
+                create("UIListLayout", {
+                    FillDirection = Enum.FillDirection.Horizontal,
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Padding = UDim.new(0, 6)
                 })
             })
 
-            create("TextLabel", {
-                Size = UDim2.new(1, 0, 0, 18),
+            SubTabBar.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                SubTabBar.CanvasSize = UDim2.fromOffset(SubTabBar.UIListLayout.AbsoluteContentSize.X + 10, 0)
+            end)
+
+            -- Sub-Page Viewport Holder
+            local SubPageHolder = create("Frame", {
+                Name = "SubPageHolder",
+                Size = UDim2.new(1, 0, 0, 480),
                 BackgroundTransparency = 1,
-                Text = "// " .. string.upper(sectionName),
-                Font = Novier.Config.FontBold,
-                TextSize = 11,
-                TextColor3 = Novier.Theme.Accent,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 15,
-                Parent = Box
+                ZIndex = 13,
+                Parent = Page
             })
 
-            local ControlsHolder = create("Frame", {
-                Size = UDim2.new(1, 0, 0, 0),
-                Position = UDim2.fromOffset(0, 24),
-                AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundTransparency = 1,
-                ZIndex = 15,
-                Parent = Box
-            }, {
-                create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder })
-            })
-
-            -- Button
-            function Section:CreateButton(name, callback)
-                local Btn = create("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 34),
-                    BackgroundColor3 = Novier.Theme.SurfaceHighlight,
-                    Text = "[ " .. name .. " ]",
-                    Font = Novier.Config.FontBold,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.TextPrimary,
-                    AutoButtonColor = false,
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
-                })
-
-                track(Btn.MouseEnter:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceElevated, TextColor3 = Novier.Theme.Accent }, 0.12) end))
-                track(Btn.MouseLeave:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
-                track(Btn.MouseButton1Click:Connect(function()
-                    tween(Btn, { BackgroundColor3 = Novier.Theme.Accent, TextColor3 = Color3.fromRGB(0, 0, 0) }, 0.08)
-                    task.delay(0.1, function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end)
-                    if callback then callback() end
-                end))
-                return Btn
-            end
-
-            -- Toggle
-            function Section:CreateToggle(name, default, callback)
-                local state = default or false
-                local ToggleBtn = create("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 34),
-                    BackgroundColor3 = Novier.Theme.SurfaceHighlight,
-                    Text = "",
-                    AutoButtonColor = false,
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
-                    create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
-                })
-
-                create("TextLabel", {
-                    Size = UDim2.new(1, -50, 1, 0),
-                    BackgroundTransparency = 1,
-                    Text = name,
-                    Font = Novier.Config.FontNormal,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.TextPrimary,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    ZIndex = 17,
-                    Parent = ToggleBtn
-                })
-
-                local Switch = create("Frame", {
-                    Size = UDim2.fromOffset(40, 20),
-                    Position = UDim2.new(1, -40, 0.5, -10),
-                    BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated,
-                    ZIndex = 17,
-                    Parent = ToggleBtn
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
-                })
-
-                local Dot = create("Frame", {
-                    Size = UDim2.fromOffset(14, 14),
-                    Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
-                    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                    ZIndex = 18,
-                    Parent = Switch
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(1, 0) })
-                })
-
-                local function apply(val)
-                    state = val
-                    tween(Switch, { BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated }, 0.15)
-                    tween(Dot, { Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3) }, 0.15)
-                    if callback then callback(state) end
+            -- Method to add a single sub-tab dynamically
+            function SubTabSystem:AddSubTab(subName, icon)
+                if SubTabSystem.SubTabs[subName] then
+                    return SubTabSystem.SubTabs[subName]
                 end
 
-                track(ToggleBtn.MouseButton1Click:Connect(function() apply(not state) end))
-                return { Set = function(_, v) apply(v) end, Get = function() return state end }
-            end
+                local SubTab = {}
+                local label = (icon and icon ~= "") and (icon .. " " .. subName) or subName
 
-            -- Slider
-            function Section:CreateSlider(name, min, max, default, step, callback)
-                min = min or 0
-                max = max or 100
-                step = step or 1
-                local current = math.clamp(default or min, min, max)
-
-                local SliderFrame = create("Frame", {
-                    Size = UDim2.new(1, 0, 0, 50),
-                    BackgroundColor3 = Novier.Theme.SurfaceHighlight,
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
-                    create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 6) })
-                })
-
-                create("TextLabel", {
-                    Size = UDim2.new(0.7, 0, 0, 18),
-                    BackgroundTransparency = 1,
-                    Text = name,
-                    Font = Novier.Config.FontNormal,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.TextPrimary,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    ZIndex = 17,
-                    Parent = SliderFrame
-                })
-
-                local Readout = create("TextLabel", {
-                    Size = UDim2.new(0.3, 0, 0, 18),
-                    Position = UDim2.new(0.7, 0, 0, 0),
-                    BackgroundTransparency = 1,
-                    Text = tostring(current),
-                    Font = Novier.Config.FontBold,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.Accent,
-                    TextXAlignment = Enum.TextXAlignment.Right,
-                    ZIndex = 17,
-                    Parent = SliderFrame
-                })
-
-                local Bar = create("Frame", {
-                    Size = UDim2.new(1, 0, 0, 6),
-                    Position = UDim2.fromOffset(0, 28),
+                local SubBtn = create("TextButton", {
+                    Name = subName .. "_SubBtn",
+                    Size = UDim2.fromOffset(0, 26),
+                    AutomaticSize = Enum.AutomaticSize.X,
                     BackgroundColor3 = Novier.Theme.SurfaceElevated,
-                    ZIndex = 17,
-                    Parent = SliderFrame
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
-                })
-
-                local Fill = create("Frame", {
-                    Size = UDim2.fromScale((current - min) / (max - min), 1),
-                    BackgroundColor3 = Novier.Theme.Accent,
-                    BorderSizePixel = 0,
-                    ZIndex = 18,
-                    Parent = Bar
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(1, 0) })
-                })
-
-                local Knob = create("Frame", {
-                    Size = UDim2.fromOffset(14, 14),
-                    AnchorPoint = Vector2.new(0.5, 0.5),
-                    Position = UDim2.new((current - min) / (max - min), 0, 0.5, 0),
-                    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                    ZIndex = 19,
-                    Parent = Bar
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.Accent })
-                })
-
-                local isDragging = false
-                local function setVal(v, emit)
-                    local snapped = math.floor((v - min) / step + 0.5) * step + min
-                    current = math.clamp(snapped, min, max)
-                    local alpha = (current - min) / (max - min)
-                    Fill.Size = UDim2.fromScale(alpha, 1)
-                    Knob.Position = UDim2.new(alpha, 0, 0.5, 0)
-                    Readout.Text = tostring(current)
-                    if emit and callback then callback(current) end
-                end
-
-                local function updateFromMouse(x)
-                    local alpha = math.clamp((x - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
-                    setVal(min + ((max - min) * alpha), true)
-                end
-
-                track(Bar.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        isDragging = true
-                        updateFromMouse(input.Position.X)
-                    end
-                end))
-
-                track(UserInputService.InputChanged:Connect(function(input)
-                    if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                        updateFromMouse(input.Position.X)
-                    end
-                end))
-
-                track(UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        isDragging = false
-                    end
-                end))
-
-                return { Set = function(_, v) setVal(v, true) end, Get = function() return current end }
-            end
-
-            -- Textbox
-            function Section:CreateTextbox(name, placeholder, clearOnFocus, callback)
-                local BoxFrame = create("Frame", {
-                    Size = UDim2.new(1, 0, 0, 36),
-                    BackgroundColor3 = Novier.Theme.SurfaceHighlight,
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
-                    create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
-                })
-
-                local Input = create("TextBox", {
-                    Size = UDim2.fromScale(1, 1),
-                    BackgroundTransparency = 1,
-                    PlaceholderText = placeholder or "Enter text...",
-                    PlaceholderColor3 = Novier.Theme.TextDisabled,
-                    Text = "",
-                    Font = Novier.Config.FontNormal,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.TextPrimary,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    ClearTextOnFocus = clearOnFocus or false,
-                    ZIndex = 17,
-                    Parent = BoxFrame
-                })
-
-                track(Input.FocusLost:Connect(function(enter)
-                    if callback then callback(Input.Text, enter) end
-                end))
-                return { Set = function(_, t) Input.Text = t end, Get = function() return Input.Text end }
-            end
-
-            -- Dropdown
-            function Section:CreateDropdown(name, list, default, callback)
-                local selected = default or list[1]
-                local isOpen = false
-
-                local MainBtn = create("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 34),
-                    BackgroundColor3 = Novier.Theme.SurfaceHighlight,
-                    Text = "",
-                    AutoButtonColor = false,
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
-                    create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
-                })
-
-                create("TextLabel", {
-                    Size = UDim2.fromScale(0.5, 1),
-                    BackgroundTransparency = 1,
-                    Text = name,
-                    Font = Novier.Config.FontNormal,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.TextPrimary,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    ZIndex = 17,
-                    Parent = MainBtn
-                })
-
-                local SelectedLbl = create("TextLabel", {
-                    Size = UDim2.new(0.5, -16, 1, 0),
-                    Position = UDim2.fromScale(0.5, 0),
-                    BackgroundTransparency = 1,
-                    Text = tostring(selected),
+                    Text = label,
                     Font = Novier.Config.FontBold,
-                    TextSize = 12,
-                    TextColor3 = Novier.Theme.Accent,
-                    TextXAlignment = Enum.TextXAlignment.Right,
-                    ZIndex = 17,
-                    Parent = MainBtn
-                })
-
-                local Menu = create("Frame", {
-                    Size = UDim2.fromOffset(0, 0),
-                    BackgroundColor3 = Novier.Theme.PillBackground,
-                    ClipsDescendants = true,
-                    Visible = false,
-                    ZIndex = 501,
-                    Parent = OverlayLayer
+                    TextSize = 10,
+                    TextColor3 = Novier.Theme.TextSecondary,
+                    AutoButtonColor = false,
+                    ZIndex = 15,
+                    Parent = SubTabBar
                 }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-                    create("UIStroke", { Thickness = 1.4, Color = Novier.Theme.Accent })
+                    create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+                    create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
+                    create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) })
                 })
 
-                local Scroll = create("ScrollingFrame", {
-                    Size = UDim2.fromScale(1, 1),
-                    BackgroundTransparency = 1,
-                    ScrollBarThickness = 2,
-                    ScrollBarImageColor3 = Novier.Theme.Accent,
-                    CanvasSize = UDim2.new(),
-                    ZIndex = 502,
-                    Parent = Menu
-                }, {
-                    create("UIListLayout", { Padding = UDim.new(0, 3) }),
-                    create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) })
-                })
-
-                local function populate()
-                    for _, c in ipairs(Scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-                    for _, item in ipairs(list) do
-                        local opt = create("TextButton", {
-                            Size = UDim2.new(1, 0, 0, 26),
-                            BackgroundColor3 = (selected == item) and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated,
-                            Text = tostring(item),
-                            Font = Novier.Config.FontNormal,
-                            TextSize = 11,
-                            TextColor3 = (selected == item) and Novier.Theme.Accent or Novier.Theme.TextPrimary,
-                            AutoButtonColor = false,
-                            ZIndex = 503,
-                            Parent = Scroll
-                        }, { create("UICorner", { CornerRadius = UDim.new(0, 4) }) })
-
-                        track(opt.MouseButton1Click:Connect(function()
-                            selected = item
-                            SelectedLbl.Text = tostring(item)
-                            if callback then callback(selected) end
-                            isOpen = false
-                            Menu.Visible = false
-                        end))
-                    end
-                    Scroll.CanvasSize = UDim2.fromOffset(0, #list * 29 + 8)
-                end
-
-                track(MainBtn.MouseButton1Click:Connect(function()
-                    isOpen = not isOpen
-                    if isOpen then
-                        populate()
-                        local absPos = MainBtn.AbsolutePosition
-                        local absSize = MainBtn.AbsoluteSize
-                        Menu.Position = UDim2.fromOffset(absPos.X, absPos.Y + absSize.Y + 4)
-                        Menu.Size = UDim2.fromOffset(absSize.X, math.clamp(#list * 29 + 10, 30, 160))
-                        Menu.Visible = true
-                    else
-                        Menu.Visible = false
-                    end
-                end))
-
-                return { Set = function(_, v) selected = v; SelectedLbl.Text = tostring(v) end, Get = function() return selected end }
-            end
-
-            -- Terminal
-            function Section:CreateTerminal(height)
-                local TermFrame = create("Frame", {
-                    Size = UDim2.new(1, 0, 0, height or 130),
-                    BackgroundColor3 = Color3.fromRGB(6, 7, 10),
-                    ZIndex = 16,
-                    Parent = ControlsHolder
-                }, {
-                    create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-                    create("UIStroke", { Thickness = 1.2, Color = Novier.Theme.BorderSubtle }),
-                    create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
-                })
-
-                local TermScroll = create("ScrollingFrame", {
+                local SubPage = create("ScrollingFrame", {
+                    Name = subName .. "_SubPage",
                     Size = UDim2.fromScale(1, 1),
                     BackgroundTransparency = 1,
                     ScrollBarThickness = 3,
                     ScrollBarImageColor3 = Novier.Theme.Accent,
                     CanvasSize = UDim2.new(),
-                    ZIndex = 17,
-                    Parent = TermFrame
+                    Visible = false,
+                    ZIndex = 13,
+                    ClipsDescendants = true,
+                    Parent = SubPageHolder
                 }, {
-                    create("UIListLayout", { Padding = UDim.new(0, 3) })
+                    create("UIListLayout", {
+                        Padding = UDim.new(0, 10),
+                        SortOrder = Enum.SortOrder.LayoutOrder
+                    }),
+                    create("UIPadding", {
+                        PaddingRight = UDim.new(0, 6),
+                        PaddingBottom = UDim.new(0, 10)
+                    })
                 })
 
-                local function append(msg, color)
-                    create("TextLabel", {
-                        Size = UDim2.new(1, 0, 0, 14),
-                        BackgroundTransparency = 1,
-                        Text = string.format("[%s] > %s", os.date("%X"), tostring(msg)),
-                        Font = Novier.Config.FontCode,
-                        TextSize = 11,
-                        TextColor3 = color or Novier.Theme.TextTerminal,
-                        TextXAlignment = Enum.TextXAlignment.Left,
-                        ZIndex = 18,
-                        Parent = TermScroll
-                    })
-                    TermScroll.CanvasSize = UDim2.fromOffset(0, TermScroll.UIListLayout.AbsoluteContentSize.Y + 16)
-                    TermScroll.CanvasPosition = Vector2.new(0, TermScroll.CanvasSize.Y.Offset)
+                SubPage.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    SubPage.CanvasSize = UDim2.fromOffset(0, SubPage.UIListLayout.AbsoluteContentSize.Y + 20)
+                end)
+
+                local function activateSubTab()
+                    for _, s in pairs(SubTabSystem.SubTabs) do
+                        s.Page.Visible = false
+                        tween(s.Button, { BackgroundColor3 = Novier.Theme.SurfaceElevated, TextColor3 = Novier.Theme.TextSecondary }, 0.12)
+                    end
+
+                    SubPage.Visible = true
+                    SubTabSystem.ActiveSubTab = SubTab
+                    tween(SubBtn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.Accent }, 0.12)
                 end
 
-                append("NOVIER CAMERA & AUDIO ENGINE READY.", Novier.Theme.Accent)
+                track(SubBtn.MouseButton1Click:Connect(activateSubTab))
 
-                return {
-                    Log = function(_, m) append(m, Novier.Theme.TextTerminal) end,
-                    Warn = function(_, m) append(m, Novier.Theme.Warning) end,
-                    Error = function(_, m) append(m, Novier.Theme.Error) end,
-                    Clear = function(_)
-                        for _, c in ipairs(TermScroll:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
-                        TermScroll.CanvasSize = UDim2.new()
-                    end
-                }
+                SubTab.Button = SubBtn
+                SubTab.Page = SubPage
+
+                function SubTab:CreateSection(secName)
+                    return buildSection(SubPage, secName, OverlayLayer)
+                end
+
+                SubTabSystem.SubTabs[subName] = SubTab
+
+                -- Auto-select the first one created
+                if not SubTabSystem.ActiveSubTab then
+                    activateSubTab()
+                end
+
+                return SubTab
             end
 
-            return Section
+            -- Method to remove a subtab dynamically
+            function SubTabSystem:RemoveSubTab(subName)
+                local sub = SubTabSystem.SubTabs[subName]
+                if sub then
+                    sub.Button:Destroy()
+                    sub.Page:Destroy()
+                    SubTabSystem.SubTabs[subName] = nil
+
+                    if SubTabSystem.ActiveSubTab == sub then
+                        SubTabSystem.ActiveSubTab = nil
+                        for _, nextSub in pairs(SubTabSystem.SubTabs) do
+                            nextSub.Page.Visible = true
+                            SubTabSystem.ActiveSubTab = nextSub
+                            tween(nextSub.Button, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.Accent }, 0.12)
+                            break
+                        end
+                    end
+                end
+            end
+
+            -- Method to clear all sub-tabs at once
+            function SubTabSystem:ClearSubTabs()
+                for name, sub in pairs(SubTabSystem.SubTabs) do
+                    sub.Button:Destroy()
+                    sub.Page:Destroy()
+                end
+                table.clear(SubTabSystem.SubTabs)
+                SubTabSystem.ActiveSubTab = nil
+            end
+
+            -- Populate initial list if supplied
+            if type(initialList) == "table" then
+                for _, item in ipairs(initialList) do
+                    if type(item) == "table" then
+                        SubTabSystem:AddSubTab(item.Name or item[1], item.Icon or item[2])
+                    else
+                        SubTabSystem:AddSubTab(tostring(item))
+                    end
+                end
+            end
+
+            return SubTabSystem
         end
 
         return Tab
+    end
+
+    --====================================================--
+    -- MODULAR SECTION BUILDER HELPER
+    --====================================================--
+    buildSection = function(parentContainer, sectionName, overlayLayer)
+        local Section = {}
+
+        local Box = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = Novier.Theme.SurfaceElevated,
+            BackgroundTransparency = 0,
+            ZIndex = 14,
+            Parent = parentContainer
+        }, {
+            create("UICorner", { CornerRadius = UDim.new(0, 10) }),
+            create("UIStroke", { Thickness = 1.2, Color = Novier.Theme.BorderSubtle }),
+            create("UIPadding", {
+                PaddingTop = UDim.new(0, 12),
+                PaddingBottom = UDim.new(0, 14),
+                PaddingLeft = UDim.new(0, 14),
+                PaddingRight = UDim.new(0, 14)
+            })
+        })
+
+        create("TextLabel", {
+            Size = UDim2.new(1, 0, 0, 18),
+            BackgroundTransparency = 1,
+            Text = "// " .. string.upper(sectionName),
+            Font = Novier.Config.FontBold,
+            TextSize = 11,
+            TextColor3 = Novier.Theme.Accent,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 15,
+            Parent = Box
+        })
+
+        local ControlsHolder = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 0),
+            Position = UDim2.fromOffset(0, 24),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            ZIndex = 15,
+            Parent = Box
+        }, {
+            create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder })
+        })
+
+        Section.Box = Box
+        Section.ControlsHolder = ControlsHolder
+
+        -- Button
+        function Section:CreateButton(name, callback)
+            local Btn = create("TextButton", {
+                Size = UDim2.new(1, 0, 0, 34),
+                BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                Text = "[ " .. name .. " ]",
+                Font = Novier.Config.FontBold,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.TextPrimary,
+                AutoButtonColor = false,
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
+            })
+
+            track(Btn.MouseEnter:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceElevated, TextColor3 = Novier.Theme.Accent }, 0.12) end))
+            track(Btn.MouseLeave:Connect(function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
+            track(Btn.MouseButton1Click:Connect(function()
+                tween(Btn, { BackgroundColor3 = Novier.Theme.Accent, TextColor3 = Color3.fromRGB(0, 0, 0) }, 0.08)
+                task.delay(0.1, function() tween(Btn, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end)
+                if callback then callback() end
+            end))
+            return Btn
+        end
+
+        -- Toggle
+        function Section:CreateToggle(name, default, callback)
+            local state = default or false
+            local ToggleBtn = create("TextButton", {
+                Size = UDim2.new(1, 0, 0, 34),
+                BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
+                create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
+            })
+
+            create("TextLabel", {
+                Size = UDim2.new(1, -50, 1, 0),
+                BackgroundTransparency = 1,
+                Text = name,
+                Font = Novier.Config.FontNormal,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.TextPrimary,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 17,
+                Parent = ToggleBtn
+            })
+
+            local Switch = create("Frame", {
+                Size = UDim2.fromOffset(40, 20),
+                Position = UDim2.new(1, -40, 0.5, -10),
+                BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated,
+                ZIndex = 17,
+                Parent = ToggleBtn
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
+            })
+
+            local Dot = create("Frame", {
+                Size = UDim2.fromOffset(14, 14),
+                Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                ZIndex = 18,
+                Parent = Switch
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(1, 0) })
+            })
+
+            local function apply(val)
+                state = val
+                tween(Switch, { BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated }, 0.15)
+                tween(Dot, { Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3) }, 0.15)
+                if callback then callback(state) end
+            end
+
+            track(ToggleBtn.MouseButton1Click:Connect(function() apply(not state) end))
+            return { Set = function(_, v) apply(v) end, Get = function() return state end }
+        end
+
+        -- Slider
+        function Section:CreateSlider(name, min, max, default, step, callback)
+            min = min or 0
+            max = max or 100
+            step = step or 1
+            local current = math.clamp(default or min, min, max)
+
+            local SliderFrame = create("Frame", {
+                Size = UDim2.new(1, 0, 0, 50),
+                BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
+                create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 6) })
+            })
+
+            create("TextLabel", {
+                Size = UDim2.new(0.7, 0, 0, 18),
+                BackgroundTransparency = 1,
+                Text = name,
+                Font = Novier.Config.FontNormal,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.TextPrimary,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 17,
+                Parent = SliderFrame
+            })
+
+            local Readout = create("TextLabel", {
+                Size = UDim2.new(0.3, 0, 0, 18),
+                Position = UDim2.new(0.7, 0, 0, 0),
+                BackgroundTransparency = 1,
+                Text = tostring(current),
+                Font = Novier.Config.FontBold,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.Accent,
+                TextXAlignment = Enum.TextXAlignment.Right,
+                ZIndex = 17,
+                Parent = SliderFrame
+            })
+
+            local Bar = create("Frame", {
+                Size = UDim2.new(1, 0, 0, 6),
+                Position = UDim2.fromOffset(0, 28),
+                BackgroundColor3 = Novier.Theme.SurfaceElevated,
+                ZIndex = 17,
+                Parent = SliderFrame
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle })
+            })
+
+            local Fill = create("Frame", {
+                Size = UDim2.fromScale((current - min) / (max - min), 1),
+                BackgroundColor3 = Novier.Theme.Accent,
+                BorderSizePixel = 0,
+                ZIndex = 18,
+                Parent = Bar
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(1, 0) })
+            })
+
+            local Knob = create("Frame", {
+                Size = UDim2.fromOffset(14, 14),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new((current - min) / (max - min), 0, 0.5, 0),
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                ZIndex = 19,
+                Parent = Bar
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.Accent })
+            })
+
+            local isDragging = false
+            local function setVal(v, emit)
+                local snapped = math.floor((v - min) / step + 0.5) * step + min
+                current = math.clamp(snapped, min, max)
+                local alpha = (current - min) / (max - min)
+                Fill.Size = UDim2.fromScale(alpha, 1)
+                Knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+                Readout.Text = tostring(current)
+                if emit and callback then callback(current) end
+            end
+
+            local function updateFromMouse(x)
+                local alpha = math.clamp((x - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                setVal(min + ((max - min) * alpha), true)
+            end
+
+            track(Bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = true
+                    updateFromMouse(input.Position.X)
+                end
+            end))
+
+            track(UserInputService.InputChanged:Connect(function(input)
+                if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    updateFromMouse(input.Position.X)
+                end
+            end))
+
+            track(UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = false
+                end
+            end))
+
+            return { Set = function(_, v) setVal(v, true) end, Get = function() return current end }
+        end
+
+        -- Textbox
+        function Section:CreateTextbox(name, placeholder, clearOnFocus, callback)
+            local BoxFrame = create("Frame", {
+                Size = UDim2.new(1, 0, 0, 36),
+                BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
+                create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
+            })
+
+            local Input = create("TextBox", {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                PlaceholderText = placeholder or "Enter text...",
+                PlaceholderColor3 = Novier.Theme.TextDisabled,
+                Text = "",
+                Font = Novier.Config.FontNormal,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.TextPrimary,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ClearTextOnFocus = clearOnFocus or false,
+                ZIndex = 17,
+                Parent = BoxFrame
+            })
+
+            track(Input.FocusLost:Connect(function(enter)
+                if callback then callback(Input.Text, enter) end
+            end))
+            return { Set = function(_, t) Input.Text = t end, Get = function() return Input.Text end }
+        end
+
+        -- Dropdown
+        function Section:CreateDropdown(name, list, default, callback)
+            local selected = default or list[1]
+            local isOpen = false
+
+            local MainBtn = create("TextButton", {
+                Size = UDim2.new(1, 0, 0, 34),
+                BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1, Color = Novier.Theme.BorderSubtle }),
+                create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
+            })
+
+            create("TextLabel", {
+                Size = UDim2.fromScale(0.5, 1),
+                BackgroundTransparency = 1,
+                Text = name,
+                Font = Novier.Config.FontNormal,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.TextPrimary,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 17,
+                Parent = MainBtn
+            })
+
+            local SelectedLbl = create("TextLabel", {
+                Size = UDim2.new(0.5, -16, 1, 0),
+                Position = UDim2.fromScale(0.5, 0),
+                BackgroundTransparency = 1,
+                Text = tostring(selected),
+                Font = Novier.Config.FontBold,
+                TextSize = 12,
+                TextColor3 = Novier.Theme.Accent,
+                TextXAlignment = Enum.TextXAlignment.Right,
+                ZIndex = 17,
+                Parent = MainBtn
+            })
+
+            local Menu = create("Frame", {
+                Size = UDim2.fromOffset(0, 0),
+                BackgroundColor3 = Novier.Theme.PillBackground,
+                ClipsDescendants = true,
+                Visible = false,
+                ZIndex = 501,
+                Parent = overlayLayer
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 8) }),
+                create("UIStroke", { Thickness = 1.4, Color = Novier.Theme.Accent })
+            })
+
+            local Scroll = create("ScrollingFrame", {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                ScrollBarThickness = 2,
+                ScrollBarImageColor3 = Novier.Theme.Accent,
+                CanvasSize = UDim2.new(),
+                ZIndex = 502,
+                Parent = Menu
+            }, {
+                create("UIListLayout", { Padding = UDim.new(0, 3) }),
+                create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) })
+            })
+
+            local function populate()
+                for _, c in ipairs(Scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+                for _, item in ipairs(list) do
+                    local opt = create("TextButton", {
+                        Size = UDim2.new(1, 0, 0, 26),
+                        BackgroundColor3 = (selected == item) and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated,
+                        Text = tostring(item),
+                        Font = Novier.Config.FontNormal,
+                        TextSize = 11,
+                        TextColor3 = (selected == item) and Novier.Theme.Accent or Novier.Theme.TextPrimary,
+                        AutoButtonColor = false,
+                        ZIndex = 503,
+                        Parent = Scroll
+                    }, { create("UICorner", { CornerRadius = UDim.new(0, 4) }) })
+
+                    track(opt.MouseButton1Click:Connect(function()
+                        selected = item
+                        SelectedLbl.Text = tostring(item)
+                        if callback then callback(selected) end
+                        isOpen = false
+                        Menu.Visible = false
+                    end))
+                end
+                Scroll.CanvasSize = UDim2.fromOffset(0, #list * 29 + 8)
+            end
+
+            track(MainBtn.MouseButton1Click:Connect(function()
+                isOpen = not isOpen
+                if isOpen then
+                    populate()
+                    local absPos = MainBtn.AbsolutePosition
+                    local absSize = MainBtn.AbsoluteSize
+                    Menu.Position = UDim2.fromOffset(absPos.X, absPos.Y + absSize.Y + 4)
+                    Menu.Size = UDim2.fromOffset(absSize.X, math.clamp(#list * 29 + 10, 30, 160))
+                    Menu.Visible = true
+                else
+                    Menu.Visible = false
+                end
+            end))
+
+            return { Set = function(_, v) selected = v; SelectedLbl.Text = tostring(v) end, Get = function() return selected end }
+        end
+
+        -- Terminal
+        function Section:CreateTerminal(height)
+            local TermFrame = create("Frame", {
+                Size = UDim2.new(1, 0, 0, height or 130),
+                BackgroundColor3 = Color3.fromRGB(6, 7, 10),
+                ZIndex = 16,
+                Parent = ControlsHolder
+            }, {
+                create("UICorner", { CornerRadius = UDim.new(0, 6) }),
+                create("UIStroke", { Thickness = 1.2, Color = Novier.Theme.BorderSubtle }),
+                create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+            })
+
+            local TermScroll = create("ScrollingFrame", {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = Novier.Theme.Accent,
+                CanvasSize = UDim2.new(),
+                ZIndex = 17,
+                Parent = TermFrame
+            }, {
+                create("UIListLayout", { Padding = UDim.new(0, 3) })
+            })
+
+            local function append(msg, color)
+                create("TextLabel", {
+                    Size = UDim2.new(1, 0, 0, 14),
+                    BackgroundTransparency = 1,
+                    Text = string.format("[%s] > %s", os.date("%X"), tostring(msg)),
+                    Font = Novier.Config.FontCode,
+                    TextSize = 11,
+                    TextColor3 = color or Novier.Theme.TextTerminal,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    ZIndex = 18,
+                    Parent = TermScroll
+                })
+                TermScroll.CanvasSize = UDim2.fromOffset(0, TermScroll.UIListLayout.AbsoluteContentSize.Y + 16)
+                TermScroll.CanvasPosition = Vector2.new(0, TermScroll.CanvasSize.Y.Offset)
+            end
+
+            append("SUB-MODULE ONLINE.", Novier.Theme.Accent)
+
+            return {
+                Log = function(_, m) append(m, Novier.Theme.TextTerminal) end,
+                Warn = function(_, m) append(m, Novier.Theme.Warning) end,
+                Error = function(_, m) append(m, Novier.Theme.Error) end,
+                Clear = function(_)
+                    for _, c in ipairs(TermScroll:GetChildren()) do if c:IsA("TextLabel") then c:Destroy() end end
+                    TermScroll.CanvasSize = UDim2.new()
+                end
+            }
+        end
+
+        return Section
     end
 
     -- Dedicated Audio & Media Suite
@@ -1197,7 +1372,6 @@ function Novier:CreateWindow(windowTitle)
             ActiveSound.Volume = val / 100
         end)
 
-        -- Beat FOV Controls Inside Media Suite
         local FovSec = MediaTab:CreateSection("Beat-Synchronized Camera FOV")
         
         FovSec:CreateToggle("Audio Beat FOV (Toggle: [RightAlt])", Novier.FOVConfig.Enabled, function(active)
