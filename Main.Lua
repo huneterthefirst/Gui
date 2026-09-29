@@ -1,39 +1,40 @@
 --[[
-    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE  (V5.0 "AURORA")
+    NOVIER // DYNAMIC ISLAND & CAPSULE ENGINE  (V6.0 "GNOME")
 
-    WHAT'S NEW IN 5.0
-    - Audio Analyzer: auto-gain, envelope followers, synthesized bass/mid/high bands,
-      spring-physics spectrum with peak-hold caps, beat + BPM detection
-    - Center-symmetric mirrored edge spectrum (bass in the middle, treble at the ends)
-    - Beat shockwave rings, edge/top/bottom glows, rotating gradient pill border
-    - Live theme system (Neon / Sakura / Sunset / Glacier / Matrix) + Novier:SetTheme(name)
-    - Ripple clicks, tooltips, keybind picker, collapsible sections, labels, separators
-    - Config save/load through flags (executor filesystem), built-in Settings tab
-    - Mobile-aware UIScale + touch toggle button, background blur, live FPS/ping in the pill
-    - Notifications rebuilt (slide-in, icon, progress bar) + Window:OnBeat(callback)
-    - Bug fixes: SetVisible(false) logic, unreachable colour branch, FOV fighting the game
-      camera, notification slide tween being overridden by UIListLayout
+    WHAT'S NEW IN 6.0
+    - THEME FAMILIES: a theme now changes the whole look, not just colors
+        Adwaita  -> GNOME / libadwaita: boxed lists, flat rows, soft radii, calm pulse, no rain/HUD
+        Cyber    -> the original neon look: bracket buttons, "//" titles, rain, HUD
+        Terminal -> monospace, square corners, "$ title", rain + HUD
+      20 themes: Adwaita Dark/Light + 7 accents, Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night,
+      Rose Pine, Neon, Sakura, Sunset, Glacier, Matrix, Amber.  Live-switch: Novier:SetTheme(name)
+    - Tab bar is now a scroller with arrow buttons on the right (no more overlapping the synth)
+    - Drawer got a GNOME-style header bar (title + close button)
+    - Section:CreatePlayerList(cfg) / Tab:CreatePlayerList(cfg): dynamic, searchable, expandable player
+      list with avatars that refreshes on join/leave AND every time its tab is opened
+    - Tab:OnOpen(fn) / SubTab:OnOpen(fn): run code whenever a tab is opened (dynamic tabs)
+    - ClearSubTabs(keepNames) can keep specific sub-tabs
+    - Media suite rebuilt: now-playing card with art pulse, mini spectrum, seekable progress bar,
+      prev/play/next/loop, boxed track library
+    - Edge spectrum is smaller (Settings: Edge Size, Pulse Strength); pulse rings/glows/border kept
+    - Theme swatch grid in Settings, Section:CreateCustom(height) for your own widgets
 
     QUICK START
-        local Novier = loadstring(game:HttpGet("https://raw.githubusercontent.com/huneterthefirst/Gui/refs/heads/main/Main.Lua"))()   -- or require(module)
+        local Novier = loadstring(game:HttpGet("YOUR_URL"))()
         local Win = Novier:CreateWindow("NOVIER // ISLAND")
         Win:CreateMediaSuite()
-        Win:CreateSettingsTab()
-
         local Tab = Win:CreateTab("MAIN", "⚡")
         local Sec = Tab:CreateSection("Movement")
-        Sec:CreateToggle("Speed", false, function(on) print(on) end, { Flag = "speed", Tooltip = "Go fast" })
-        Sec:CreateSlider("WalkSpeed", 16, 120, 16, 1, function(v) end, { Flag = "ws" })
-        Sec:CreateKeybind("Panic", Enum.KeyCode.P, function() Novier:Destroy() end)
-
-        Win:OnBeat(function(strength) end)   -- fires on every detected beat
+        Sec:CreateToggle("Speed", false, function(on) end, { Flag = "speed", Tooltip = "Go fast" })
+        Win:CreatePlayersTab({ Actions = { {"Teleport", function(plr) end} } })
+        Win:CreateSettingsTab()
 
     Default keys: [RightControl] toggle UI, [RightAlt] toggle beat FOV
 ]]
 
 local Novier = {}
 Novier.__index = Novier
-Novier.Version = "5.0.0 AURORA"
+Novier.Version = "6.0.0 GNOME"
 
 -- Services
 local Players          = game:GetService("Players")
@@ -50,111 +51,225 @@ local Debris           = game:GetService("Debris")
 
 local LocalPlayer = Players.LocalPlayer
 local NSK, CSK = NumberSequenceKeypoint.new, ColorSequenceKeypoint.new
+local Fnt = Enum.Font
 
 --========================================================--
--- THEMES
+-- THEMES  (colors + a "Family" that decides the look)
 --========================================================--
 local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
 
-local BASE_THEME = {
-    PillBackground   = rgb(10, 12, 17),
-    DrawerBackground = rgb(13, 16, 22),
-    SurfaceElevated  = rgb(21, 26, 37),
-    SurfaceHighlight = rgb(32, 40, 56),
-    Accent           = rgb(0, 255, 170),
-    AccentGlow       = rgb(0, 235, 255),
-    SecondaryAccent  = rgb(255, 0, 110),
-    TextPrimary      = rgb(255, 255, 255),
-    TextSecondary    = rgb(180, 195, 210),
-    TextTerminal     = rgb(0, 255, 170),
-    TextDisabled     = rgb(115, 130, 145),
-    Border           = rgb(0, 255, 170),
-    BorderSubtle     = rgb(45, 55, 75),
-    Success          = rgb(0, 255, 128),
-    Warning          = rgb(255, 204, 0),
-    Error            = rgb(255, 60, 90),
+local BASE_THEME = { -- Neon (Cyber) is the default color base
+    PillBackground = rgb(10, 12, 17), DrawerBackground = rgb(13, 16, 22), HeaderBackground = rgb(13, 16, 22),
+    SurfaceElevated = rgb(21, 26, 37), SurfaceHighlight = rgb(32, 40, 56), Divider = rgb(45, 55, 75),
+    Accent = rgb(0, 255, 170), AccentGlow = rgb(0, 235, 255), SecondaryAccent = rgb(255, 0, 110), AccentText = rgb(8, 10, 14),
+    TextPrimary = rgb(255, 255, 255), TextSecondary = rgb(180, 195, 210), TextTerminal = rgb(0, 255, 170), TextDisabled = rgb(115, 130, 145),
+    Border = rgb(0, 255, 170), BorderSubtle = rgb(45, 55, 75),
+    Success = rgb(0, 255, 128), Warning = rgb(255, 204, 0), Error = rgb(255, 60, 90),
 }
 
-local function makeTheme(overrides)
+local ADW_BASE = { -- libadwaita dark palette
+    PillBackground = rgb(18, 18, 18), DrawerBackground = rgb(36, 36, 36), HeaderBackground = rgb(46, 46, 46),
+    SurfaceElevated = rgb(50, 50, 50), SurfaceHighlight = rgb(68, 68, 68), Divider = rgb(64, 64, 64),
+    Accent = rgb(98, 160, 234), AccentGlow = rgb(153, 193, 241), SecondaryAccent = rgb(192, 216, 246), AccentText = rgb(255, 255, 255),
+    TextPrimary = rgb(255, 255, 255), TextSecondary = rgb(178, 178, 176), TextTerminal = rgb(255, 255, 255), TextDisabled = rgb(125, 125, 130),
+    Border = rgb(98, 160, 234), BorderSubtle = rgb(64, 64, 64),
+    Success = rgb(143, 240, 164), Warning = rgb(248, 228, 92), Error = rgb(255, 123, 99),
+}
+
+local function build(family, base, o)
+    o = o or {}
     local t = {}
-    for k, v in pairs(BASE_THEME) do t[k] = v end
-    for k, v in pairs(overrides or {}) do t[k] = v end
-    if not (overrides and overrides.Border) then t.Border = t.Accent end
-    if not (overrides and overrides.TextTerminal) then t.TextTerminal = t.Accent end
+    for k, v in pairs(base) do t[k] = v end
+    for k, v in pairs(o) do t[k] = v end
+    t.Family = family
+    if o.Accent and not o.Border then t.Border = t.Accent end
+    if o.Accent and family ~= "Adwaita" and not o.TextTerminal then t.TextTerminal = t.Accent end
+    if o.DrawerBackground and not o.HeaderBackground then t.HeaderBackground = t.DrawerBackground end
+    if o.BorderSubtle and not o.Divider then t.Divider = t.BorderSubtle end
+    return t
+end
+local function adw(o) return build("Adwaita", ADW_BASE, o) end
+local function cyber(o) return build("Cyber", BASE_THEME, o) end
+local function term(o) return build("Terminal", BASE_THEME, o) end
+
+Novier.Themes = {
+    -- GNOME / Adwaita family
+    ["Adwaita Dark"]   = adw({}),
+    ["Adwaita Light"]  = adw({
+        PillBackground = rgb(246, 245, 244), DrawerBackground = rgb(250, 250, 250), HeaderBackground = rgb(235, 235, 235),
+        SurfaceElevated = rgb(255, 255, 255), SurfaceHighlight = rgb(236, 236, 236), Divider = rgb(224, 224, 224),
+        Accent = rgb(53, 132, 228), AccentGlow = rgb(98, 160, 234), SecondaryAccent = rgb(153, 193, 241),
+        TextPrimary = rgb(46, 52, 54), TextSecondary = rgb(100, 104, 108), TextTerminal = rgb(46, 52, 54), TextDisabled = rgb(160, 160, 165),
+        BorderSubtle = rgb(216, 216, 216), Success = rgb(38, 162, 105), Warning = rgb(205, 147, 9), Error = rgb(224, 27, 36),
+    }),
+    ["Adwaita Purple"] = adw({ Accent = rgb(200, 120, 220), AccentGlow = rgb(220, 138, 221), SecondaryAccent = rgb(246, 190, 246) }),
+    ["Adwaita Teal"]   = adw({ Accent = rgb(64, 186, 190), AccentGlow = rgb(147, 221, 194), SecondaryAccent = rgb(190, 240, 225), AccentText = rgb(12, 36, 38) }),
+    ["Adwaita Green"]  = adw({ Accent = rgb(80, 200, 130), AccentGlow = rgb(143, 240, 164), SecondaryAccent = rgb(200, 250, 210), AccentText = rgb(10, 40, 22) }),
+    ["Adwaita Orange"] = adw({ Accent = rgb(255, 140, 60), AccentGlow = rgb(255, 163, 72), SecondaryAccent = rgb(255, 205, 150), AccentText = rgb(50, 22, 0) }),
+    ["Adwaita Pink"]   = adw({ Accent = rgb(240, 110, 170), AccentGlow = rgb(250, 150, 195), SecondaryAccent = rgb(255, 200, 225) }),
+    ["Adwaita Red"]    = adw({ Accent = rgb(240, 100, 90), AccentGlow = rgb(255, 130, 110), SecondaryAccent = rgb(255, 190, 170) }),
+    ["Catppuccin"]     = adw({
+        PillBackground = rgb(17, 17, 27), DrawerBackground = rgb(30, 30, 46), HeaderBackground = rgb(24, 24, 37),
+        SurfaceElevated = rgb(42, 43, 60), SurfaceHighlight = rgb(69, 71, 90), Divider = rgb(60, 62, 80),
+        Accent = rgb(203, 166, 247), AccentGlow = rgb(245, 194, 231), SecondaryAccent = rgb(180, 190, 254), AccentText = rgb(30, 30, 46),
+        TextPrimary = rgb(205, 214, 244), TextSecondary = rgb(166, 173, 200), TextTerminal = rgb(205, 214, 244), TextDisabled = rgb(108, 112, 134),
+        BorderSubtle = rgb(60, 62, 80), Success = rgb(166, 227, 161), Warning = rgb(249, 226, 175), Error = rgb(243, 139, 168),
+    }),
+    ["Nord"]           = adw({
+        PillBackground = rgb(36, 41, 51), DrawerBackground = rgb(46, 52, 64), HeaderBackground = rgb(52, 58, 73),
+        SurfaceElevated = rgb(59, 66, 82), SurfaceHighlight = rgb(67, 76, 94), Divider = rgb(72, 80, 98),
+        Accent = rgb(136, 192, 208), AccentGlow = rgb(143, 188, 187), SecondaryAccent = rgb(129, 161, 193), AccentText = rgb(46, 52, 64),
+        TextPrimary = rgb(236, 239, 244), TextSecondary = rgb(170, 178, 192), TextTerminal = rgb(236, 239, 244), TextDisabled = rgb(110, 120, 138),
+        BorderSubtle = rgb(72, 80, 98), Success = rgb(163, 190, 140), Warning = rgb(235, 203, 139), Error = rgb(191, 97, 106),
+    }),
+    ["Dracula"]        = adw({
+        PillBackground = rgb(30, 31, 41), DrawerBackground = rgb(40, 42, 54), HeaderBackground = rgb(33, 34, 44),
+        SurfaceElevated = rgb(48, 50, 66), SurfaceHighlight = rgb(68, 71, 90), Divider = rgb(62, 65, 84),
+        Accent = rgb(189, 147, 249), AccentGlow = rgb(255, 121, 198), SecondaryAccent = rgb(139, 233, 253), AccentText = rgb(40, 42, 54),
+        TextPrimary = rgb(248, 248, 242), TextSecondary = rgb(170, 175, 205), TextTerminal = rgb(248, 248, 242), TextDisabled = rgb(98, 114, 164),
+        BorderSubtle = rgb(62, 65, 84), Success = rgb(80, 250, 123), Warning = rgb(241, 250, 140), Error = rgb(255, 85, 85),
+    }),
+    ["Gruvbox"]        = adw({
+        PillBackground = rgb(29, 32, 33), DrawerBackground = rgb(40, 40, 40), HeaderBackground = rgb(50, 48, 47),
+        SurfaceElevated = rgb(60, 56, 54), SurfaceHighlight = rgb(80, 73, 69), Divider = rgb(76, 70, 66),
+        Accent = rgb(250, 189, 47), AccentGlow = rgb(254, 128, 25), SecondaryAccent = rgb(211, 134, 155), AccentText = rgb(40, 40, 40),
+        TextPrimary = rgb(235, 219, 178), TextSecondary = rgb(189, 174, 147), TextTerminal = rgb(235, 219, 178), TextDisabled = rgb(146, 131, 116),
+        BorderSubtle = rgb(76, 70, 66), Success = rgb(184, 187, 38), Warning = rgb(250, 189, 47), Error = rgb(251, 73, 52),
+    }),
+    ["Tokyo Night"]    = adw({
+        PillBackground = rgb(22, 22, 30), DrawerBackground = rgb(26, 27, 38), HeaderBackground = rgb(31, 35, 53),
+        SurfaceElevated = rgb(36, 40, 59), SurfaceHighlight = rgb(52, 59, 88), Divider = rgb(47, 53, 80),
+        Accent = rgb(122, 162, 247), AccentGlow = rgb(125, 207, 255), SecondaryAccent = rgb(187, 154, 247), AccentText = rgb(26, 27, 38),
+        TextPrimary = rgb(192, 202, 245), TextSecondary = rgb(154, 165, 206), TextTerminal = rgb(192, 202, 245), TextDisabled = rgb(86, 95, 137),
+        BorderSubtle = rgb(47, 53, 80), Success = rgb(158, 206, 106), Warning = rgb(224, 175, 104), Error = rgb(247, 118, 142),
+    }),
+    ["Rose Pine"]      = adw({
+        PillBackground = rgb(16, 15, 24), DrawerBackground = rgb(25, 23, 36), HeaderBackground = rgb(31, 29, 46),
+        SurfaceElevated = rgb(38, 35, 58), SurfaceHighlight = rgb(57, 53, 82), Divider = rgb(52, 48, 74),
+        Accent = rgb(196, 167, 231), AccentGlow = rgb(235, 188, 186), SecondaryAccent = rgb(156, 207, 216), AccentText = rgb(25, 23, 36),
+        TextPrimary = rgb(224, 222, 244), TextSecondary = rgb(144, 140, 170), TextTerminal = rgb(224, 222, 244), TextDisabled = rgb(110, 106, 134),
+        BorderSubtle = rgb(52, 48, 74), Success = rgb(156, 207, 216), Warning = rgb(246, 193, 119), Error = rgb(235, 111, 146),
+    }),
+    -- Cyber family (the original neon look)
+    ["Neon"]    = cyber({}),
+    ["Sakura"]  = cyber({
+        PillBackground = rgb(17, 11, 20), DrawerBackground = rgb(21, 14, 26), SurfaceElevated = rgb(34, 22, 40), SurfaceHighlight = rgb(50, 32, 58),
+        Accent = rgb(255, 120, 200), AccentGlow = rgb(200, 140, 255), SecondaryAccent = rgb(120, 220, 255), BorderSubtle = rgb(70, 48, 82),
+    }),
+    ["Sunset"]  = cyber({
+        PillBackground = rgb(18, 11, 10), DrawerBackground = rgb(23, 14, 12), SurfaceElevated = rgb(38, 24, 20), SurfaceHighlight = rgb(56, 36, 28),
+        Accent = rgb(255, 150, 60), AccentGlow = rgb(255, 210, 90), SecondaryAccent = rgb(255, 60, 110), BorderSubtle = rgb(80, 52, 40),
+    }),
+    ["Glacier"] = cyber({
+        PillBackground = rgb(9, 13, 20), DrawerBackground = rgb(11, 17, 27), SurfaceElevated = rgb(18, 28, 44), SurfaceHighlight = rgb(28, 44, 68),
+        Accent = rgb(90, 180, 255), AccentGlow = rgb(140, 240, 255), SecondaryAccent = rgb(170, 120, 255), BorderSubtle = rgb(38, 58, 88),
+    }),
+    -- Terminal family (monospace, square, matrix rain)
+    ["Matrix"]  = term({
+        PillBackground = rgb(4, 10, 6), DrawerBackground = rgb(6, 14, 9), SurfaceElevated = rgb(10, 24, 15), SurfaceHighlight = rgb(16, 38, 24),
+        Accent = rgb(60, 255, 90), AccentGlow = rgb(170, 255, 120), SecondaryAccent = rgb(255, 230, 80), BorderSubtle = rgb(24, 64, 38),
+    }),
+    ["Amber"]   = term({
+        PillBackground = rgb(14, 9, 3), DrawerBackground = rgb(20, 13, 4), SurfaceElevated = rgb(34, 22, 8), SurfaceHighlight = rgb(54, 36, 12),
+        Accent = rgb(255, 176, 0), AccentGlow = rgb(255, 214, 102), SecondaryAccent = rgb(255, 94, 0), BorderSubtle = rgb(80, 54, 16),
+        TextPrimary = rgb(255, 224, 160), TextSecondary = rgb(200, 160, 100),
+    }),
+}
+
+--[[ Style families: how things LOOK (radii, spacing, fonts, decoration) ]]
+local FAMILIES = {
+    Adwaita = {
+        Font = Fnt.Ubuntu, FontBold = Fnt.Ubuntu, FontCode = Fnt.RobotoMono,
+        TextSize = 14, SmallSize = 12, TitleSize = 15,
+        CardRadius = 14, RowRadius = 0, ButtonRadius = 10, InputRadius = 9, DrawerRadius = 18, PillRadius = 999,
+        RowExtra = 14, RowGap = 0, CardPad = 0, RowFlat = true, RowStroke = 0, CardStroke = 1, DrawerStroke = 1, Dividers = true,
+        TitlePrefix = "", Upper = false, TitleAccent = false, Brackets = false, ButtonChevron = true, ButtonAlign = "Left",
+        TabFlat = true, TabAccent = false, Pulse = 0.6, EdgeRound = true, Rain = false, HUD = false, PillStroke = 1.2,
+        Ripple = false, BrandIcon = "✦",
+    },
+    Cyber = {
+        Font = Fnt.GothamMedium, FontBold = Fnt.GothamBold, FontCode = Fnt.Code,
+        TextSize = 12, SmallSize = 10, TitleSize = 11,
+        CardRadius = 12, RowRadius = 8, ButtonRadius = 8, InputRadius = 8, DrawerRadius = 16, PillRadius = 999,
+        RowExtra = 0, RowGap = 8, CardPad = 12, RowFlat = false, RowStroke = 1, CardStroke = 1.2, DrawerStroke = 1.4, Dividers = false,
+        TitlePrefix = "// ", Upper = true, TitleAccent = true, Brackets = true, ButtonChevron = false, ButtonAlign = "Center",
+        TabFlat = false, TabAccent = true, Pulse = 1, EdgeRound = true, Rain = true, HUD = true, PillStroke = 1.6,
+        Ripple = true, BrandIcon = "⚡",
+    },
+    Terminal = {
+        Font = Fnt.Code, FontBold = Fnt.Code, FontCode = Fnt.Code,
+        TextSize = 12, SmallSize = 11, TitleSize = 12,
+        CardRadius = 3, RowRadius = 2, ButtonRadius = 2, InputRadius = 2, DrawerRadius = 4, PillRadius = 8,
+        RowExtra = 0, RowGap = 4, CardPad = 8, RowFlat = false, RowStroke = 1, CardStroke = 1, DrawerStroke = 1, Dividers = false,
+        TitlePrefix = "$ ", Upper = false, TitleAccent = true, Brackets = true, ButtonChevron = false, ButtonAlign = "Center",
+        TabFlat = false, TabAccent = true, Pulse = 1.15, EdgeRound = false, Rain = true, HUD = true, PillStroke = 1,
+        Ripple = true, BrandIcon = ">_",
+    },
+}
+
+Novier.Theme, Novier.Style = {}, {}
+Novier.ThemeName = "Adwaita Dark"
+
+local function applyPreset(name)
+    local preset = Novier.Themes[name]
+    if not preset then return false end
+    local fam = FAMILIES[preset.Family or "Cyber"] or FAMILIES.Cyber
+    for k, v in pairs(BASE_THEME) do Novier.Theme[k] = v end
+    for k, v in pairs(preset) do
+        if type(v) ~= "string" then Novier.Theme[k] = v end
+    end
+    for k, v in pairs(fam) do Novier.Style[k] = v end
+    Novier.Style.Family = preset.Family or "Cyber"
+    Novier.ThemeName = name
+    return true
+end
+applyPreset("Adwaita Dark")
+
+function Novier:AddTheme(name, colors, family)
+    family = family or "Cyber"
+    local base = (family == "Adwaita" and Novier.Themes["Adwaita Dark"]) or (family == "Terminal" and Novier.Themes["Matrix"]) or Novier.Themes["Neon"]
+    local t = {}
+    for k, v in pairs(base) do t[k] = v end
+    for k, v in pairs(colors or {}) do t[k] = v end
+    t.Family = family
+    Novier.Themes[name] = t
     return t
 end
 
-Novier.Themes = {
-    Neon = makeTheme({}),
-    Sakura = makeTheme({
-        PillBackground = rgb(17, 11, 20), DrawerBackground = rgb(21, 14, 26),
-        SurfaceElevated = rgb(34, 22, 40), SurfaceHighlight = rgb(50, 32, 58),
-        Accent = rgb(255, 120, 200), AccentGlow = rgb(200, 140, 255), SecondaryAccent = rgb(120, 220, 255),
-        BorderSubtle = rgb(70, 48, 82),
-    }),
-    Sunset = makeTheme({
-        PillBackground = rgb(18, 11, 10), DrawerBackground = rgb(23, 14, 12),
-        SurfaceElevated = rgb(38, 24, 20), SurfaceHighlight = rgb(56, 36, 28),
-        Accent = rgb(255, 150, 60), AccentGlow = rgb(255, 210, 90), SecondaryAccent = rgb(255, 60, 110),
-        BorderSubtle = rgb(80, 52, 40),
-    }),
-    Glacier = makeTheme({
-        PillBackground = rgb(9, 13, 20), DrawerBackground = rgb(11, 17, 27),
-        SurfaceElevated = rgb(18, 28, 44), SurfaceHighlight = rgb(28, 44, 68),
-        Accent = rgb(90, 180, 255), AccentGlow = rgb(140, 240, 255), SecondaryAccent = rgb(170, 120, 255),
-        BorderSubtle = rgb(38, 58, 88),
-    }),
-    Matrix = makeTheme({
-        PillBackground = rgb(4, 10, 6), DrawerBackground = rgb(6, 14, 9),
-        SurfaceElevated = rgb(10, 24, 15), SurfaceHighlight = rgb(16, 38, 24),
-        Accent = rgb(60, 255, 90), AccentGlow = rgb(170, 255, 120), SecondaryAccent = rgb(255, 230, 80),
-        BorderSubtle = rgb(24, 64, 38),
-    }),
-}
-
-Novier.ThemeName = "Neon"
-Novier.Theme = makeTheme(Novier.Themes.Neon) -- live table (mutated by SetTheme)
-
 Novier.Config = {
-    FontNormal       = Enum.Font.GothamMedium,
-    FontBold         = Enum.Font.GothamBold,
-    FontCode         = Enum.Font.Code,
-    PillWidth        = 780,
+    PillWidth        = 820,
     PillHeight       = 46,
-    DrawerWidth      = 840,
-    DrawerHeight     = 560,
+    DrawerWidth      = 760,
+    DrawerHeight     = 500,
     DefaultToggleKey = Enum.KeyCode.RightControl,
     DefaultFovKey    = Enum.KeyCode.RightAlt,
     ConfigFolder     = "Novier",
 }
 
--- Live-tweakable settings (all exposed in Window:CreateSettingsTab)
 Novier.Settings = {
-    EdgeVisuals   = true,
-    Rain          = true,
-    Rings         = true,
-    Blur          = true,
-    IdleBreathing = true,
-    UISounds      = false,
-    ShowStats     = true,
-    AutoGain      = true,
-    Sensitivity   = 1,
-    VisualHz      = 60,
-    UIScale       = 1,
+    EdgeVisuals = true, Rain = Novier.Style.Rain, Rings = true, Blur = true,
+    IdleBreathing = true, UISounds = false, ShowStats = true, AutoGain = true,
+    Sensitivity = 1, VisualHz = 60, UIScale = 1, EdgeSize = 1, Pulse = 1,
 }
 
 Novier.FOVConfig = { Enabled = false, BaseFOV = 70, MaxKick = 24, Smoothness = 0.18 }
 
-Novier._Connections  = {}
-Novier._FlagSetters  = {}
-Novier._FlagGetters  = {}
-Novier._MenuClosers  = {}
+Novier._Connections = {}
+Novier._FlagSetters = {}
+Novier._FlagGetters = {}
+Novier._MenuClosers = {}
 local Bindings, ThemeHooks, ScaleObjects = {}, {}, {}
 
 --========================================================--
 -- CORE HELPERS
+-- Property markers: T("Key") = theme color, S("Key") = style value, F(fn) = fn(theme, style)
+-- create() binds them, so SetTheme re-colors AND re-styles everything live.
 --========================================================--
-local function T(key) return { __theme = key } end -- theme-bound property marker
+local function T(key) return { __theme = key } end
+local function S(key) return { __style = key } end
+local function F(fn) return { __fn = fn } end
+local function rad(key) return F(function(_, s) return UDim.new(0, s[key]) end) end
+local function tsize(delta) return F(function(_, s) return s.TextSize + (delta or 0) end) end
 
 local function create(className, properties, children)
     local inst = Instance.new(className)
@@ -163,9 +278,17 @@ local function create(className, properties, children)
         if prop == "Parent" then
             parent = val
         else
-            if type(val) == "table" and val.__theme then
-                table.insert(Bindings, { inst = inst, prop = prop, key = val.__theme })
-                val = Novier.Theme[val.__theme]
+            if type(val) == "table" then
+                if val.__theme then
+                    table.insert(Bindings, { inst = inst, prop = prop, kind = "theme", ref = val.__theme })
+                    val = Novier.Theme[val.__theme]
+                elseif val.__style then
+                    table.insert(Bindings, { inst = inst, prop = prop, kind = "style", ref = val.__style })
+                    val = Novier.Style[val.__style]
+                elseif val.__fn then
+                    table.insert(Bindings, { inst = inst, prop = prop, kind = "fn", ref = val.__fn })
+                    val = val.__fn(Novier.Theme, Novier.Style)
+                end
             end
             inst[prop] = val
         end
@@ -234,12 +357,17 @@ local function getPing()
     return ok and v or 0
 end
 
--- Theme engine
+local function resolveBinding(b)
+    if b.kind == "theme" then return Novier.Theme[b.ref] end
+    if b.kind == "style" then return Novier.Style[b.ref] end
+    return b.ref(Novier.Theme, Novier.Style)
+end
+
 local function reapplyTheme()
     for i = #Bindings, 1, -1 do
         local b = Bindings[i]
         if b.inst and b.inst:IsDescendantOf(game) then
-            b.inst[b.prop] = Novier.Theme[b.key]
+            pcall(function() b.inst[b.prop] = resolveBinding(b) end)
         else
             table.remove(Bindings, i)
         end
@@ -248,10 +376,12 @@ local function reapplyTheme()
 end
 
 function Novier:SetTheme(name)
-    local preset = Novier.Themes[name]
-    if not preset then return false end
-    for k, v in pairs(preset) do Novier.Theme[k] = v end
-    Novier.ThemeName = name
+    local prevFamily = Novier.Style.Family
+    if not applyPreset(name) then return false end
+    if Novier.Style.Family ~= prevFamily then -- new family: adopt its default for code rain
+        local set = Novier._FlagSetters["vis_rain"]
+        if set then pcall(set, Novier.Style.Rain) else Novier.Settings.Rain = Novier.Style.Rain end
+    end
     reapplyTheme()
     return true
 end
@@ -260,7 +390,7 @@ end
 local function computeScale()
     local cam = Workspace.CurrentCamera
     local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-    local fit = math.clamp(math.min(vp.X / 900, vp.Y / 680), 0.5, 1)
+    local fit = math.clamp(math.min(vp.X / 900, vp.Y / 660), 0.5, 1)
     return fit * Novier.Settings.UIScale
 end
 
@@ -278,7 +408,6 @@ local function refreshScale()
     end
 end
 
--- Tiny UI sound effects (off by default)
 local function sfx(kind)
     if not Novier.Settings.UISounds then return end
     pcall(function()
@@ -292,8 +421,9 @@ local function sfx(kind)
     end)
 end
 
--- Click ripple (button must have ClipsDescendants = true)
+-- Click ripple (only in families with Ripple = true; button needs ClipsDescendants)
 local function ripple(btn)
+    if not Novier.Style.Ripple then return end
     local sc = computeScale()
     local m = UserInputService:GetMouseLocation()
     local abs, size = btn.AbsolutePosition, btn.AbsoluteSize
@@ -301,14 +431,9 @@ local function ripple(btn)
     local y = math.clamp((m.Y - abs.Y) / sc, 0, size.Y / sc)
     local d = math.max(size.X, size.Y) / sc * 2.4
     local r = create("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromOffset(x, y),
-        Size = UDim2.fromOffset(0, 0),
-        BackgroundColor3 = Novier.Theme.Accent,
-        BackgroundTransparency = 0.7,
-        BorderSizePixel = 0,
-        ZIndex = btn.ZIndex + 1,
-        Parent = btn,
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(0, 0),
+        BackgroundColor3 = Novier.Theme.Accent, BackgroundTransparency = 0.7, BorderSizePixel = 0,
+        ZIndex = btn.ZIndex + 1, Parent = btn,
     }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
     tween(r, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, 0.5, Enum.EasingStyle.Quad)
     Debris:AddItem(r, 0.6)
@@ -318,27 +443,16 @@ end
 local Tip = {}
 local function buildTooltip(overlay)
     local frame = create("Frame", {
-        Name = "Tooltip",
-        Size = UDim2.fromOffset(0, 24),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundColor3 = T("PillBackground"),
-        Visible = false,
-        ZIndex = 900,
-        Parent = overlay,
+        Name = "Tooltip", Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X,
+        BackgroundColor3 = T("PillBackground"), Visible = false, ZIndex = 900, Parent = overlay,
     }, {
-        create("UICorner", { CornerRadius = UDim.new(0, 6) }),
-        create("UIStroke", { Thickness = 1, Color = T("Accent") }),
-        create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }),
+        create("UICorner", { CornerRadius = rad("InputRadius") }),
+        create("UIStroke", { Thickness = 1, Color = T("BorderSubtle") }),
+        create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }),
     })
     local label = create("TextLabel", {
-        Size = UDim2.new(0, 0, 1, 0),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundTransparency = 1,
-        Font = Novier.Config.FontNormal,
-        TextSize = 11,
-        TextColor3 = T("TextPrimary"),
-        ZIndex = 901,
-        Parent = frame,
+        Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1,
+        Font = S("Font"), TextSize = tsize(-1), TextColor3 = T("TextPrimary"), ZIndex = 901, Parent = frame,
     })
     function Tip.Move()
         local m = UserInputService:GetMouseLocation()
@@ -346,7 +460,7 @@ local function buildTooltip(overlay)
         local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
         frame.Position = UDim2.fromOffset(
             math.min(m.X + 14, vp.X - frame.AbsoluteSize.X - 8),
-            math.min(m.Y + 16, vp.Y - 32)
+            math.min(m.Y + 16, vp.Y - 34)
         )
     end
     function Tip.Show(text) label.Text = text; frame.Visible = true; Tip.Move() end
@@ -380,9 +494,8 @@ end
 
 --========================================================--
 -- AUDIO ANALYZER
--- Roblox only exposes Sound.PlaybackLoudness (no FFT), so we fake a believable
--- spectrum: envelope followers split "body" (bass) from "transients" (mid/high),
--- and every band is a spring that chases its own target.
+-- Roblox only exposes Sound.PlaybackLoudness (no FFT), so the spectrum is synthesized:
+-- envelope followers split body (bass) from transients (mid/high); each band is a spring.
 --========================================================--
 local BAND_COUNT = 16
 local Analyzer = {}
@@ -421,14 +534,13 @@ function Analyzer:Update(dt, sound, settings)
     self.fast  = follow(self.fast,  norm, dt, 45, 22)
     self.avg   = follow(self.avg,   norm, dt, 1.4, 1.4)
 
-    local flux = math.max(0, norm - self.prev) / dt -- how fast loudness is rising
+    local flux = math.max(0, norm - self.prev) / dt
     self.prev = norm
 
     self.bass = follow(self.bass, math.clamp(self.slow * 1.25, 0, 1), dt, 18, 5)
     self.mid  = follow(self.mid,  math.clamp((self.fast - self.slow) * 3.2 + self.slow * 0.35, 0, 1), dt, 30, 9)
     self.high = follow(self.high, math.clamp(flux / 9, 0, 1), dt, 60, 12)
 
-    -- Beat detection: loud, above the running average, rising fast, with a cooldown
     self.beatFired = false
     if playing and norm > 0.14 and norm > self.avg * 1.22 + 0.03 and flux > 1.5 and (now - self.lastBeat) > 0.17 then
         local interval = now - self.lastBeat
@@ -443,9 +555,8 @@ function Analyzer:Update(dt, sound, settings)
     self.beat = self.beat * math.exp(-dt * 6.5)
     if not playing then self.bpm = self.bpm * (1 - dt * 0.5) end
 
-    -- Spring-driven bands
     for i = 1, BAND_COUNT do
-        local f = (i - 1) / (BAND_COUNT - 1) -- 0 = bass, 1 = treble
+        local f = (i - 1) / (BAND_COUNT - 1)
         local lowW  = (1 - f) ^ 1.4
         local midW  = math.exp(-((f - 0.45) ^ 2) / 0.05)
         local highW = f ^ 1.3
@@ -472,7 +583,6 @@ function Analyzer:Update(dt, sound, settings)
     end
 end
 
--- pos: 0 = bass ... 1 = treble (linear interpolation between bands)
 function Analyzer:Sample(pos, tbl)
     tbl = tbl or self.bands
     local x = math.clamp(pos, 0, 1) * (BAND_COUNT - 1) + 1
@@ -482,7 +592,7 @@ function Analyzer:Sample(pos, tbl)
 end
 
 --========================================================--
--- BACKGROUND: CODE RAIN (single driver, beat-reactive)
+-- BACKGROUND LAYERS
 --========================================================--
 local function buildRain(gui)
     local Canvas = create("Frame", {
@@ -501,19 +611,10 @@ local function buildRain(gui)
         local lines = {}
         for k = 1, 70 do lines[k] = snippets[math.random(#snippets)] end
         local label = create("TextLabel", {
-            Size = UDim2.new(1 / N, 0, 1, 0),
-            Position = UDim2.new((i - 1) / N, 0, -1, 0),
-            BackgroundTransparency = 1,
-            Text = table.concat(lines, "\n"),
-            Font = Novier.Config.FontCode,
-            TextSize = 10,
-            TextColor3 = T("Accent"),
-            TextTransparency = 0.92,
-            TextYAlignment = Enum.TextYAlignment.Top,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextWrapped = true,
-            ZIndex = 1,
-            Parent = Canvas,
+            Size = UDim2.new(1 / N, 0, 1, 0), Position = UDim2.new((i - 1) / N, 0, -1, 0),
+            BackgroundTransparency = 1, Text = table.concat(lines, "\n"), Font = S("FontCode"), TextSize = 10,
+            TextColor3 = T("Accent"), TextTransparency = 0.92, TextYAlignment = Enum.TextYAlignment.Top,
+            TextXAlignment = Enum.TextXAlignment.Center, TextWrapped = true, ZIndex = 1, Parent = Canvas,
         })
         cols[i] = { label = label, i = i, p = math.random(), speed = 1 / math.random(24, 44) }
     end
@@ -530,38 +631,35 @@ local function buildRain(gui)
     return { Root = Canvas, Update = update }
 end
 
---========================================================--
--- SCREEN HUD (corner brackets)
---========================================================--
 local function buildScreenHUD(gui)
     local Root = create("Frame", {
         Name = "ScreenHUD", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
         ZIndex = 2, Active = false, Parent = gui,
     })
-    local function bracket(anchor, pos, text)
+    local function bracket(anchor, pos)
         return create("TextLabel", {
-            Size = UDim2.fromOffset(240, 42), AnchorPoint = anchor, Position = pos,
-            BackgroundTransparency = 1, Font = Novier.Config.FontCode, TextSize = 10,
-            TextColor3 = T("Accent"), TextTransparency = 0.35,
+            Size = UDim2.fromOffset(240, 42), AnchorPoint = anchor, Position = pos, BackgroundTransparency = 1,
+            Font = S("FontCode"), TextSize = 10, TextColor3 = T("Accent"), TextTransparency = 0.35,
             TextXAlignment = (anchor.X == 0) and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right,
             TextYAlignment = (anchor.Y == 0) and Enum.TextYAlignment.Top or Enum.TextYAlignment.Bottom,
-            Text = text, ZIndex = 3, Parent = Root,
+            Text = "", ZIndex = 3, Parent = Root,
         })
     end
     return {
         Root = Root,
-        TL = bracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14), ""),
-        TR = bracket(Vector2.new(1, 0), UDim2.new(1, -14, 0, 14), ""),
-        BL = bracket(Vector2.new(0, 1), UDim2.new(0, 14, 1, -14), ""),
-        BR = bracket(Vector2.new(1, 1), UDim2.new(1, -14, 1, -14), ""),
+        TL = bracket(Vector2.new(0, 0), UDim2.fromOffset(14, 14)),
+        TR = bracket(Vector2.new(1, 0), UDim2.new(1, -14, 0, 14)),
+        BL = bracket(Vector2.new(0, 1), UDim2.new(0, 14, 1, -14)),
+        BR = bracket(Vector2.new(1, 1), UDim2.new(1, -14, 1, -14)),
     }
 end
 
 --========================================================--
--- EDGE VISUALS: mirrored center-symmetric spectrum + glows
+-- EDGE VISUALS (smaller than v5): mirrored, center-symmetric spectrum + soft glows
 --========================================================--
 local function buildEdgeVisuals(gui)
-    local BARS = 36
+    local BARS = 26
+    local BASE_W, BASE_H = 0.055, 0.48
     local Root = create("Frame", {
         Name = "EdgeVisuals", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
         ZIndex = 4, Active = false, Parent = gui,
@@ -570,19 +668,18 @@ local function buildEdgeVisuals(gui)
     local function makeGlow(anchor, pos, size, rot)
         local grad = create("UIGradient", { Rotation = rot, Transparency = NumberSequence.new(1) })
         local frame = create("Frame", {
-            AnchorPoint = anchor, Position = pos, Size = size,
-            BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0,
-            ZIndex = 3, Active = false, Parent = Root,
+            AnchorPoint = anchor, Position = pos, Size = size, BackgroundColor3 = Novier.Theme.Accent,
+            BorderSizePixel = 0, ZIndex = 3, Active = false, Parent = Root,
         }, { grad })
         return { Frame = frame, Grad = grad, Last = -1 }
     end
-    local GL = makeGlow(Vector2.new(0, 0.5), UDim2.fromScale(0, 0.5), UDim2.new(0, 60, 0.9, 0), 0)
-    local GR = makeGlow(Vector2.new(1, 0.5), UDim2.fromScale(1, 0.5), UDim2.new(0, 60, 0.9, 0), 180)
-    local GT = makeGlow(Vector2.new(0.5, 0), UDim2.fromScale(0.5, 0), UDim2.new(0.7, 0, 0, 40), 90)
-    local GB = makeGlow(Vector2.new(0.5, 1), UDim2.fromScale(0.5, 1), UDim2.new(0.7, 0, 0, 40), 270)
+    local GL = makeGlow(Vector2.new(0, 0.5), UDim2.fromScale(0, 0.5), UDim2.new(0, 40, 0.8, 0), 0)
+    local GR = makeGlow(Vector2.new(1, 0.5), UDim2.fromScale(1, 0.5), UDim2.new(0, 40, 0.8, 0), 180)
+    local GT = makeGlow(Vector2.new(0.5, 0), UDim2.fromScale(0.5, 0), UDim2.new(0.5, 0, 0, 26), 90)
+    local GB = makeGlow(Vector2.new(0.5, 1), UDim2.fromScale(0.5, 1), UDim2.new(0.5, 0, 0, 26), 270)
 
     local function setGlow(g, intensity, color)
-        intensity = math.clamp(intensity, 0, 0.92)
+        intensity = math.clamp(intensity, 0, 0.8)
         g.Frame.BackgroundColor3 = color
         if math.abs(intensity - g.Last) > 0.008 then
             g.Last = intensity
@@ -593,67 +690,67 @@ local function buildEdgeVisuals(gui)
     local function makeSide(isRight)
         local panel = create("Frame", {
             Name = isRight and "RightSpectrum" or "LeftSpectrum",
-            AnchorPoint = Vector2.new(isRight and 1 or 0, 0.5),
-            Position = UDim2.new(isRight and 1 or 0, 0, 0.5, 0),
-            Size = UDim2.new(0.14, 0, 0.72, 0),
-            BackgroundTransparency = 1, ZIndex = 5, Active = false, Parent = Root,
+            AnchorPoint = Vector2.new(isRight and 1 or 0, 0.5), Position = UDim2.new(isRight and 1 or 0, 0, 0.5, 0),
+            Size = UDim2.new(BASE_W, 0, BASE_H, 0), BackgroundTransparency = 1, ZIndex = 5, Active = false, Parent = Root,
         })
         local bars, caps = {}, {}
         for j = 1, BARS do
             local y = (j - 1) / BARS
             bars[j] = create("Frame", {
-                AnchorPoint = Vector2.new(isRight and 1 or 0, 0),
-                Position = UDim2.new(isRight and 1 or 0, 0, y, 1),
-                Size = UDim2.new(0, 3, 1 / BARS, -2),
-                BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0, ZIndex = 5, Parent = panel,
-            }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+                AnchorPoint = Vector2.new(isRight and 1 or 0, 0), Position = UDim2.new(isRight and 1 or 0, 0, y, 1),
+                Size = UDim2.new(0, 2, 1 / BARS, -2), BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0,
+                ZIndex = 5, Parent = panel,
+            }, { create("UICorner", { CornerRadius = F(function(_, s) return UDim.new(s.EdgeRound and 1 or 0, 0) end) }) })
             caps[j] = create("Frame", {
-                AnchorPoint = Vector2.new(isRight and 1 or 0, 0),
-                Position = UDim2.new(isRight and 1 or 0, 0, y, 1),
-                Size = UDim2.new(0, 2, 1 / BARS, -2),
-                BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.35,
+                AnchorPoint = Vector2.new(isRight and 1 or 0, 0), Position = UDim2.new(isRight and 1 or 0, 0, y, 1),
+                Size = UDim2.new(0, 2, 1 / BARS, -2), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.4,
                 BorderSizePixel = 0, Visible = false, ZIndex = 6, Parent = panel,
             })
         end
-        return { Panel = panel, Bars = bars, Caps = caps, Right = isRight }
+        return { Panel = panel, Bars = bars, Caps = caps, Right = isRight, LastW = BASE_W }
     end
     local Left, Right = makeSide(false), makeSide(true)
 
-    local function update(an)
+    local function update(an, pulse, edgeScale)
         local th = Novier.Theme
-        local glowColor = th.Accent:Lerp(th.SecondaryAccent, an.beat * 0.8)
-        local side = 0.08 + an.bass * 0.5 + an.beat * 0.35
-        local w = math.floor(60 + an.bass * 140 + an.beat * 70)
-        GL.Frame.Size = UDim2.new(0, w, 0.9, 0)
-        GR.Frame.Size = UDim2.new(0, w, 0.9, 0)
+        local glowColor = th.Accent:Lerp(th.SecondaryAccent, an.beat * 0.7)
+        local side = (0.05 + an.bass * 0.3 + an.beat * 0.22) * pulse
+        local w = math.floor(36 + an.bass * 60 + an.beat * 34)
+        GL.Frame.Size = UDim2.new(0, w, 0.8, 0)
+        GR.Frame.Size = UDim2.new(0, w, 0.8, 0)
         setGlow(GL, side, glowColor)
         setGlow(GR, side, glowColor)
-        local flash = an.beat * 0.55 + an.high * 0.2
-        local h = math.floor(36 + an.beat * 80)
-        GT.Frame.Size = UDim2.new(0.7, 0, 0, h)
-        GB.Frame.Size = UDim2.new(0.7, 0, 0, h)
+        local flash = (an.beat * 0.4 + an.high * 0.12) * pulse
+        local h = math.floor(24 + an.beat * 40)
+        GT.Frame.Size = UDim2.new(0.5, 0, 0, h)
+        GB.Frame.Size = UDim2.new(0.5, 0, 0, h)
         setGlow(GT, flash, th.AccentGlow)
         setGlow(GB, flash, th.AccentGlow)
 
+        local pw = BASE_W * edgeScale
+        for _, s in ipairs({ Left, Right }) do
+            if math.abs(s.LastW - pw) > 0.0005 then
+                s.LastW = pw
+                s.Panel.Size = UDim2.new(pw, 0, BASE_H, 0)
+            end
+        end
+
         for j = 1, BARS do
             local y = (j - 1) / BARS
-            local c = math.abs(((j - 0.5) / BARS) * 2 - 1) -- 0 = center, 1 = edges
+            local c = math.abs(((j - 0.5) / BARS) * 2 - 1)
             local v = an:Sample(c)
             local pk = an:Sample(c, an.peaks)
             local col = spectrumColor(v)
-            local trans = 0.05 + (1 - v) * 0.55
+            local trans = 0.08 + (1 - v) * 0.55
             for _, s in ipairs({ Left, Right }) do
                 local bar, cap = s.Bars[j], s.Caps[j]
-                bar.Size = UDim2.new(v, 3, 1 / BARS, -2)
+                bar.Size = UDim2.new(v, 2, 1 / BARS, -2)
                 bar.BackgroundColor3 = col
                 bar.BackgroundTransparency = trans
                 if pk > v + 0.02 then
                     cap.Visible = true
-                    if s.Right then
-                        cap.Position = UDim2.new(1 - pk, -3, y, 1)
-                    else
-                        cap.Position = UDim2.new(pk, 3, y, 1)
-                    end
+                    if s.Right then cap.Position = UDim2.new(1 - pk, -3, y, 1)
+                    else cap.Position = UDim2.new(pk, 3, y, 1) end
                 else
                     cap.Visible = false
                 end
@@ -664,154 +761,188 @@ local function buildEdgeVisuals(gui)
     return { Root = Root, Update = update }
 end
 
--- Expanding shockwave ring behind the pill
-local function spawnRing(gui, pill, strength)
+local function spawnRing(gui, pill, strength, pulse)
     local size, pos = pill.AbsoluteSize, pill.AbsolutePosition
     local ring = create("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromOffset(pos.X + size.X / 2, pos.Y + size.Y / 2),
-        Size = UDim2.fromOffset(size.X, size.Y),
-        BackgroundTransparency = 1, ZIndex = 60, Active = false, Parent = gui,
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(pos.X + size.X / 2, pos.Y + size.Y / 2),
+        Size = UDim2.fromOffset(size.X, size.Y), BackgroundTransparency = 1, ZIndex = 60, Active = false, Parent = gui,
     }, {
-        create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-        create("UIStroke", { Thickness = 2, Color = Novier.Theme.Accent, Transparency = 0.35 }),
+        create("UICorner", { CornerRadius = UDim.new(0, Novier.Style.PillRadius) }),
+        create("UIStroke", { Thickness = 2, Color = Novier.Theme.Accent, Transparency = 0.4 }),
     })
-    local grow = 50 + strength * 90
+    local grow = 36 + strength * 70 * pulse
     tween(ring, { Size = UDim2.fromOffset(size.X + grow * 2, size.Y + grow * 0.8) }, 0.55, Enum.EasingStyle.Quad)
     tween(ring:FindFirstChildOfClass("UIStroke"), { Transparency = 1, Thickness = 0.5 }, 0.55)
     Debris:AddItem(ring, 0.65)
 end
 
 --========================================================--
--- SECTION BUILDER (all controls)
+-- SECTION BUILDER (GNOME boxed lists / cyber cards, decided by Style)
 --========================================================--
-local function makeRow(parent, className, height, props, padTop)
+--[[ makeRow: one list row. custom = { parent, height, count, divider, order } ]]
+local function makeRow(section, className, base, props, custom)
     props = props or {}
-    props.Size = UDim2.new(1, 0, 0, height)
+    custom = custom or {}
+    local order = custom.order or 0
+    if custom.count ~= false then
+        section._n = section._n + 1
+        order = section._n
+    end
+    props.Size = custom.height and UDim2.new(1, 0, 0, custom.height)
+        or F(function(_, s) return UDim2.new(1, 0, 0, base + s.RowExtra) end)
     props.BackgroundColor3 = T("SurfaceHighlight")
+    props.BackgroundTransparency = F(function(_, s) return s.RowFlat and 1 or 0 end)
     props.BorderSizePixel = 0
     props.ZIndex = 16
-    props.Parent = parent
-    local stroke = create("UIStroke", { Thickness = 1, Color = T("BorderSubtle") })
-    local inst = create(className, props, {
-        create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-        stroke,
-        create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, padTop or 0) }),
+    props.LayoutOrder = order
+    props.Parent = custom.parent or section.ControlsHolder
+
+    local stroke = create("UIStroke", {
+        Thickness = F(function(_, s) return s.RowStroke end), Color = T("BorderSubtle"),
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
     })
-    return inst, stroke
+    local hover = create("Frame", {
+        Name = "Hover", Position = UDim2.fromOffset(-10, 3), Size = UDim2.new(1, 20, 1, -6),
+        BackgroundColor3 = T("TextPrimary"), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 15,
+    }, { create("UICorner", { CornerRadius = rad("ButtonRadius") }) })
+
+    local inst = create(className, props, {
+        create("UICorner", { CornerRadius = rad("RowRadius") }),
+        stroke,
+        create("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }),
+        hover,
+    })
+    if custom.divider ~= false and order > 1 then
+        create("Frame", {
+            Name = "Divider", Position = UDim2.fromOffset(-14, 0), Size = UDim2.new(1, 28, 0, 1),
+            BackgroundColor3 = T("Divider"), BorderSizePixel = 0, ZIndex = 17,
+            Visible = F(function(_, s) return s.Dividers end), Parent = inst,
+        })
+    end
+    return inst, stroke, hover
 end
 
-local function hoverFx(btn, stroke)
+local function hoverFx(btn, stroke, hover)
     track(btn.MouseEnter:Connect(function()
         sfx("hover")
-        tween(stroke, { Color = Novier.Theme.Accent }, 0.15)
+        if Novier.Style.RowFlat then tween(hover, { BackgroundTransparency = 0.92 }, 0.12)
+        else tween(stroke, { Color = Novier.Theme.Accent }, 0.15) end
     end))
     track(btn.MouseLeave:Connect(function()
+        tween(hover, { BackgroundTransparency = 1 }, 0.15)
         tween(stroke, { Color = Novier.Theme.BorderSubtle }, 0.15)
     end))
 end
 
-local function buildSection(parentContainer, sectionName, overlayLayer)
-    local Section = {}
-
-    local Box = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundColor3 = T("SurfaceElevated"),
-        BorderSizePixel = 0,
-        ZIndex = 14,
-        Parent = parentContainer,
-    }, {
-        create("UICorner", { CornerRadius = UDim.new(0, 12) }),
-        create("UIStroke", { Thickness = 1.2, Color = T("BorderSubtle") }),
-        create("UIPadding", { PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 14), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }),
+local function rowLabel(parent, text, width, font)
+    return create("TextLabel", {
+        Size = UDim2.new(width or 0.6, 0, 1, 0), BackgroundTransparency = 1, Text = text,
+        Font = font or S("Font"), TextSize = tsize(0), TextColor3 = T("TextPrimary"),
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 17, Parent = parent,
     })
+end
+
+local function buildSection(parentContainer, sectionName, overlayLayer, owner)
+    local Section = { _n = 0, _owner = owner }
+
+    local Root = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+        ZIndex = 14, Parent = parentContainer,
+    }, { create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }) })
 
     local Header = create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 18),
-        BackgroundTransparency = 1,
-        Text = "// " .. string.upper(sectionName),
-        Font = Novier.Config.FontBold,
-        TextSize = 11,
-        TextColor3 = T("Accent"),
-        TextXAlignment = Enum.TextXAlignment.Left,
-        AutoButtonColor = false,
-        ZIndex = 15,
-        Parent = Box,
-    })
+        LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+        Text = F(function(_, s) return s.TitlePrefix .. (s.Upper and string.upper(sectionName) or sectionName) end),
+        Font = S("FontBold"), TextSize = F(function(_, s) return s.TitleSize end),
+        TextColor3 = F(function(th, s) return s.TitleAccent and th.Accent or th.TextPrimary end),
+        TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false, ZIndex = 15, Parent = Root,
+    }, { create("UIPadding", { PaddingLeft = UDim.new(0, 4) }) })
     local Chevron = create("TextLabel", {
-        Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0),
-        BackgroundTransparency = 1, Text = "▾", Font = Novier.Config.FontBold, TextSize = 12,
-        TextColor3 = T("TextSecondary"), ZIndex = 16, Parent = Header,
+        Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BackgroundTransparency = 1, Text = "▾",
+        Font = S("FontBold"), TextSize = 12, TextColor3 = T("TextSecondary"), ZIndex = 16, Parent = Header,
     })
 
-    local ControlsHolder = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.fromOffset(0, 26),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        ZIndex = 15,
-        Parent = Box,
-    }, { create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }) })
+    local Box = create("Frame", {
+        LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundColor3 = T("SurfaceElevated"), BorderSizePixel = 0, ZIndex = 14, Parent = Root,
+    }, {
+        create("UICorner", { CornerRadius = rad("CardRadius") }),
+        create("UIStroke", { Thickness = F(function(_, s) return s.CardStroke end), Color = T("BorderSubtle"), ApplyStrokeMode = Enum.ApplyStrokeMode.Border }),
+    })
+    local Controls = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 15, Parent = Box,
+    }, {
+        create("UIListLayout", { Padding = F(function(_, s) return UDim.new(0, s.RowGap) end), SortOrder = Enum.SortOrder.LayoutOrder }),
+        create("UIPadding", {
+            PaddingTop = F(function(_, s) return UDim.new(0, s.CardPad) end), PaddingBottom = F(function(_, s) return UDim.new(0, s.CardPad) end),
+            PaddingLeft = F(function(_, s) return UDim.new(0, s.CardPad) end), PaddingRight = F(function(_, s) return UDim.new(0, s.CardPad) end),
+        }),
+    })
+    Section.ControlsHolder, Section.Box = Controls, Box
 
     local collapsed = false
     track(Header.MouseButton1Click:Connect(function()
         sfx("click")
         collapsed = not collapsed
         Chevron.Text = collapsed and "▸" or "▾"
-        ControlsHolder.Visible = not collapsed
-        if collapsed then
-            ControlsHolder.AutomaticSize = Enum.AutomaticSize.None
-            ControlsHolder.Size = UDim2.new(1, 0, 0, 0)
-        else
-            ControlsHolder.AutomaticSize = Enum.AutomaticSize.Y
-        end
+        Box.Visible = not collapsed
     end))
-
-    Section.Box, Section.ControlsHolder = Box, ControlsHolder
 
     ---------------------------------------------------------- Button
     function Section:CreateButton(name, callback, opts)
         opts = opts or {}
-        local Btn, stroke = makeRow(ControlsHolder, "TextButton", 34, {
-            Text = "[ " .. name .. " ]", Font = Novier.Config.FontBold, TextSize = 12,
-            TextColor3 = T("TextPrimary"), AutoButtonColor = false, ClipsDescendants = true,
+        local text = name
+        local Btn, stroke, hover = makeRow(Section, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
+        local Title = create("TextLabel", {
+            Size = UDim2.new(1, -20, 1, 0), BackgroundTransparency = 1,
+            Text = F(function(_, s) return s.Brackets and ("[ " .. text .. " ]") or text end),
+            Font = S("FontBold"), TextSize = tsize(0), TextColor3 = T("TextPrimary"), TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = F(function(_, s) return s.ButtonAlign == "Center" and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left end),
+            ZIndex = 17, Parent = Btn,
         })
-        hoverFx(Btn, stroke)
-        track(Btn.MouseEnter:Connect(function() tween(Btn, { TextColor3 = Novier.Theme.Accent }, 0.12) end))
-        track(Btn.MouseLeave:Connect(function() tween(Btn, { TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
+        create("TextLabel", {
+            Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BackgroundTransparency = 1, Text = "›",
+            Font = S("FontBold"), TextSize = 20, TextColor3 = T("TextSecondary"), ZIndex = 17,
+            Visible = F(function(_, s) return s.ButtonChevron end), Parent = Btn,
+        })
+        hoverFx(Btn, stroke, hover)
+        track(Btn.MouseEnter:Connect(function()
+            if Novier.Style.Brackets then tween(Title, { TextColor3 = Novier.Theme.Accent }, 0.12) end
+        end))
+        track(Btn.MouseLeave:Connect(function() tween(Title, { TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
         track(Btn.MouseButton1Click:Connect(function()
             ripple(Btn); sfx("click")
             safe(callback)
         end))
         attachTooltip(Btn, opts.Tooltip)
-        return Btn
+        return {
+            Instance = Btn,
+            SetText = function(_, t)
+                text = t
+                Title.Text = Novier.Style.Brackets and ("[ " .. text .. " ]") or text
+            end,
+        }
     end
 
     ---------------------------------------------------------- Toggle
     function Section:CreateToggle(name, default, callback, opts)
         opts = opts or {}
         local state = default or false
-        local Btn, stroke = makeRow(ControlsHolder, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
-        hoverFx(Btn, stroke)
-        create("TextLabel", {
-            Size = UDim2.new(1, -52, 1, 0), BackgroundTransparency = 1, Text = name,
-            Font = Novier.Config.FontNormal, TextSize = 12, TextColor3 = T("TextPrimary"),
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 17, Parent = Btn,
-        })
+        local Btn, stroke, hover = makeRow(Section, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
+        hoverFx(Btn, stroke, hover)
+        rowLabel(Btn, name, 0.75)
+        local function offColor() return Novier.Style.RowFlat and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated end
         local Switch = create("Frame", {
-            Size = UDim2.fromOffset(40, 20), Position = UDim2.new(1, -40, 0.5, -10),
-            BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated, ZIndex = 17, Parent = Btn,
-        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Thickness = 1, Color = T("BorderSubtle") }) })
+            Size = UDim2.fromOffset(44, 24), Position = UDim2.new(1, -44, 0.5, -12),
+            BackgroundColor3 = state and Novier.Theme.Accent or offColor(), ZIndex = 17, Parent = Btn,
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
         local Dot = create("Frame", {
-            Size = UDim2.fromOffset(14, 14),
-            Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
+            Size = UDim2.fromOffset(18, 18), Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3),
             BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 18, Parent = Switch,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
-
         local function paint(instant)
             local d = instant and 0 or 0.16
-            tween(Switch, { BackgroundColor3 = state and Novier.Theme.Accent or Novier.Theme.SurfaceElevated }, d)
+            tween(Switch, { BackgroundColor3 = state and Novier.Theme.Accent or offColor() }, d)
             tween(Dot, { Position = state and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3) }, d, Enum.EasingStyle.Back)
         end
         local function set(v, silent)
@@ -840,33 +971,31 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         end
         local range = math.max(max - min, 1e-6)
 
-        local Frame = makeRow(ControlsHolder, "Frame", 50, {}, 6)
-        create("TextLabel", {
-            Size = UDim2.new(0.7, 0, 0, 18), BackgroundTransparency = 1, Text = name,
-            Font = Novier.Config.FontNormal, TextSize = 12, TextColor3 = T("TextPrimary"),
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 17, Parent = Frame,
+        local Row = makeRow(Section, "Frame", 50, {})
+        local Content = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 40), Position = UDim2.new(0, 0, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
+            BackgroundTransparency = 1, ZIndex = 16, Parent = Row,
         })
+        local NameLbl = rowLabel(Content, name, 0.7)
+        NameLbl.Size = UDim2.new(0.7, 0, 0, 18)
         local Readout = create("TextLabel", {
-            Size = UDim2.new(0.3, 0, 0, 18), Position = UDim2.new(0.7, 0, 0, 0), BackgroundTransparency = 1,
-            Text = fmt(current), Font = Novier.Config.FontBold, TextSize = 12, TextColor3 = T("Accent"),
-            TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 17, Parent = Frame,
+            Size = UDim2.new(0.3, 0, 0, 18), Position = UDim2.new(0.7, 0, 0, 0), BackgroundTransparency = 1, Text = fmt(current),
+            Font = S("FontBold"), TextSize = tsize(0), TextColor3 = T("Accent"), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 17, Parent = Content,
         })
         local Bar = create("Frame", {
-            Size = UDim2.new(1, 0, 0, 6), Position = UDim2.fromOffset(0, 28),
-            BackgroundColor3 = T("SurfaceElevated"), BorderSizePixel = 0, ZIndex = 17, Parent = Frame,
+            Size = UDim2.new(1, 0, 0, 6), Position = UDim2.fromOffset(0, 28), BackgroundColor3 = T("SurfaceHighlight"),
+            BorderSizePixel = 0, ZIndex = 17, Parent = Content,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        local BarBg = create("UIStroke", { Thickness = F(function(_, s) return s.RowFlat and 0 or 1 end), Color = T("BorderSubtle"), Parent = Bar })
         local Fill = create("Frame", {
-            Size = UDim2.fromScale((current - min) / range, 1), BackgroundColor3 = T("Accent"),
-            BorderSizePixel = 0, ZIndex = 18, Parent = Bar,
+            Size = UDim2.fromScale((current - min) / range, 1), BackgroundColor3 = T("Accent"), BorderSizePixel = 0, ZIndex = 18, Parent = Bar,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
         local Knob = create("Frame", {
-            Size = UDim2.fromOffset(14, 14), AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new((current - min) / range, 0, 0.5, 0),
+            Size = UDim2.fromOffset(16, 16), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new((current - min) / range, 0, 0.5, 0),
             BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 19, Parent = Bar,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Thickness = 1.5, Color = T("Accent") }) })
         local Hit = create("TextButton", {
-            Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 18),
-            BackgroundTransparency = 1, Text = "", ZIndex = 20, Parent = Frame,
+            Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(0, 18), BackgroundTransparency = 1, Text = "", ZIndex = 20, Parent = Content,
         })
 
         local dragging = false
@@ -886,7 +1015,7 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         track(Hit.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
-                tween(Knob, { Size = UDim2.fromOffset(18, 18) }, 0.1)
+                tween(Knob, { Size = UDim2.fromOffset(20, 20) }, 0.1)
                 fromMouse(input.Position.X)
             end
         end))
@@ -898,10 +1027,10 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         track(UserInputService.InputEnded:Connect(function(input)
             if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
                 dragging = false
-                tween(Knob, { Size = UDim2.fromOffset(14, 14) }, 0.1)
+                tween(Knob, { Size = UDim2.fromOffset(16, 16) }, 0.1)
             end
         end))
-        attachTooltip(Frame, opts.Tooltip)
+        attachTooltip(Row, opts.Tooltip)
         registerFlag(opts, function() return current end, function(v) setVal(tonumber(v) or current, true) end)
         return { Set = function(_, v) setVal(v, true) end, Get = function() return current end }
     end
@@ -909,20 +1038,28 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
     ---------------------------------------------------------- Textbox
     function Section:CreateTextbox(name, placeholder, clearOnFocus, callback, opts)
         opts = opts or {}
-        local BoxFrame, stroke = makeRow(ControlsHolder, "Frame", 36, {})
+        local Row = makeRow(Section, "Frame", 36, {})
+        rowLabel(Row, name, 0.38)
+        local Entry = create("Frame", {
+            Size = UDim2.new(0.6, 0, 0, 28), Position = UDim2.new(0.4, 0, 0.5, -14),
+            BackgroundColor3 = F(function(th, s) return s.RowFlat and th.SurfaceHighlight or th.SurfaceElevated end),
+            BorderSizePixel = 0, ZIndex = 17, Parent = Row,
+        }, {
+            create("UICorner", { CornerRadius = rad("InputRadius") }),
+            create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }),
+        })
+        local stroke = create("UIStroke", { Thickness = 1, Color = T("BorderSubtle"), Parent = Entry })
         local Input = create("TextBox", {
-            Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-            PlaceholderText = placeholder or "Enter text...", PlaceholderColor3 = T("TextDisabled"),
-            Text = "", Font = Novier.Config.FontNormal, TextSize = 12, TextColor3 = T("TextPrimary"),
-            TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = clearOnFocus or false,
-            ZIndex = 17, Parent = BoxFrame,
+            Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, PlaceholderText = placeholder or "Enter text...",
+            PlaceholderColor3 = T("TextDisabled"), Text = "", Font = S("Font"), TextSize = tsize(-1), TextColor3 = T("TextPrimary"),
+            TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = clearOnFocus or false, ZIndex = 18, Parent = Entry,
         })
         track(Input.Focused:Connect(function() tween(stroke, { Color = Novier.Theme.Accent }, 0.15) end))
         track(Input.FocusLost:Connect(function(enter)
             tween(stroke, { Color = Novier.Theme.BorderSubtle }, 0.15)
             safe(callback, Input.Text, enter)
         end))
-        attachTooltip(BoxFrame, opts.Tooltip)
+        attachTooltip(Row, opts.Tooltip)
         registerFlag(opts, function() return Input.Text end, function(v) Input.Text = tostring(v) end)
         return { Set = function(_, t) Input.Text = t end, Get = function() return Input.Text end }
     end
@@ -934,27 +1071,26 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         local selected = default or list[1]
         local isOpen = false
 
-        local MainBtn, stroke = makeRow(ControlsHolder, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
-        hoverFx(MainBtn, stroke)
-        create("TextLabel", {
-            Size = UDim2.fromScale(0.5, 1), BackgroundTransparency = 1, Text = name,
-            Font = Novier.Config.FontNormal, TextSize = 12, TextColor3 = T("TextPrimary"),
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 17, Parent = MainBtn,
-        })
+        local MainBtn, stroke, hover = makeRow(Section, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
+        hoverFx(MainBtn, stroke, hover)
+        rowLabel(MainBtn, name, 0.5)
         local SelectedLbl = create("TextLabel", {
             Size = UDim2.new(0.5, 0, 1, 0), Position = UDim2.fromScale(0.5, 0), BackgroundTransparency = 1,
-            Text = tostring(selected) .. "  ▾", Font = Novier.Config.FontBold, TextSize = 12, TextColor3 = T("Accent"),
-            TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 17, Parent = MainBtn,
+            Text = tostring(selected) .. "  ▾", Font = S("FontBold"), TextSize = tsize(0), TextColor3 = T("Accent"),
+            TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 17, Parent = MainBtn,
         })
         local Menu = create("Frame", {
-            Size = UDim2.fromOffset(0, 0), BackgroundColor3 = T("PillBackground"),
-            ClipsDescendants = true, Visible = false, ZIndex = 501, Parent = overlayLayer,
-        }, { create("UICorner", { CornerRadius = UDim.new(0, 8) }), create("UIStroke", { Thickness = 1.4, Color = T("Accent") }) })
+            Size = UDim2.fromOffset(0, 0), BackgroundColor3 = T("SurfaceElevated"), ClipsDescendants = true,
+            Visible = false, ZIndex = 501, Parent = overlayLayer,
+        }, {
+            create("UICorner", { CornerRadius = rad("ButtonRadius") }),
+            create("UIStroke", { Thickness = 1.2, Color = T("BorderSubtle") }),
+        })
         local Scroll = create("ScrollingFrame", {
             Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScrollBarThickness = 2,
             ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(), ZIndex = 502, Parent = Menu,
         }, {
-            create("UIListLayout", { Padding = UDim.new(0, 3) }),
+            create("UIListLayout", { Padding = UDim.new(0, 2) }),
             create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }),
         })
 
@@ -976,21 +1112,16 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
             for _, item in ipairs(list) do
                 local on = (selected == item)
                 local opt = create("TextButton", {
-                    Size = UDim2.new(1, 0, 0, 26),
-                    BackgroundColor3 = on and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated,
-                    Text = tostring(item), Font = Novier.Config.FontNormal, TextSize = 11,
-                    TextColor3 = on and Novier.Theme.Accent or Novier.Theme.TextPrimary,
-                    AutoButtonColor = false, ZIndex = 503, Parent = Scroll,
-                }, { create("UICorner", { CornerRadius = UDim.new(0, 5) }) })
-                track(opt.MouseEnter:Connect(function() tween(opt, { BackgroundColor3 = Novier.Theme.SurfaceHighlight }, 0.1) end))
-                track(opt.MouseLeave:Connect(function()
-                    tween(opt, { BackgroundColor3 = (selected == item) and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated }, 0.1)
-                end))
-                track(opt.MouseButton1Click:Connect(function()
-                    sfx("click"); choose(item); closeMenu()
-                end))
+                    Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = Novier.Theme.SurfaceHighlight,
+                    BackgroundTransparency = on and 0.4 or 1, Text = tostring(item), Font = S("Font"), TextSize = tsize(-1),
+                    TextColor3 = on and Novier.Theme.Accent or Novier.Theme.TextPrimary, AutoButtonColor = false,
+                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 503, Parent = Scroll,
+                }, { create("UICorner", { CornerRadius = rad("InputRadius") }), create("UIPadding", { PaddingLeft = UDim.new(0, 10) }) })
+                track(opt.MouseEnter:Connect(function() tween(opt, { BackgroundTransparency = 0.5 }, 0.1) end))
+                track(opt.MouseLeave:Connect(function() tween(opt, { BackgroundTransparency = (selected == item) and 0.4 or 1 }, 0.1) end))
+                track(opt.MouseButton1Click:Connect(function() sfx("click"); choose(item); closeMenu() end))
             end
-            Scroll.CanvasSize = UDim2.fromOffset(0, #list * 29 + 8)
+            Scroll.CanvasSize = UDim2.fromOffset(0, #list * 30 + 8)
         end
 
         track(MainBtn.MouseButton1Click:Connect(function()
@@ -1000,7 +1131,7 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
             populate()
             local absPos, absSize = MainBtn.AbsolutePosition, MainBtn.AbsoluteSize
             Menu.Position = UDim2.fromOffset(absPos.X, absPos.Y + absSize.Y + 4)
-            Menu.Size = UDim2.fromOffset(absSize.X, math.clamp(#list * 29 + 10, 30, 170))
+            Menu.Size = UDim2.fromOffset(math.max(absSize.X, 180), math.clamp(#list * 30 + 12, 34, 190))
             Menu.Visible = true
             SelectedLbl.Text = tostring(selected) .. "  ▴"
         end))
@@ -1027,17 +1158,12 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
     function Section:CreateKeybind(name, default, onPress, opts)
         opts = opts or {}
         local key, listening = default, false
-        local Btn, stroke = makeRow(ControlsHolder, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
-        hoverFx(Btn, stroke)
-        create("TextLabel", {
-            Size = UDim2.fromScale(0.55, 1), BackgroundTransparency = 1, Text = name,
-            Font = Novier.Config.FontNormal, TextSize = 12, TextColor3 = T("TextPrimary"),
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 17, Parent = Btn,
-        })
+        local Btn, stroke, hover = makeRow(Section, "TextButton", 34, { Text = "", AutoButtonColor = false, ClipsDescendants = true })
+        hoverFx(Btn, stroke, hover)
+        rowLabel(Btn, name, 0.5)
         local KeyLbl = create("TextLabel", {
-            Size = UDim2.fromScale(0.45, 1), Position = UDim2.fromScale(0.55, 0), BackgroundTransparency = 1,
-            Text = "", Font = Novier.Config.FontCode, TextSize = 12, TextColor3 = T("Accent"),
-            TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 17, Parent = Btn,
+            Size = UDim2.fromScale(0.5, 1), Position = UDim2.fromScale(0.5, 0), BackgroundTransparency = 1, Text = "",
+            Font = S("FontCode"), TextSize = tsize(0), TextColor3 = T("Accent"), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 17, Parent = Btn,
         })
         local function show()
             KeyLbl.Text = listening and "press a key... (Bksp = clear)" or ("[ " .. (key and key.Name or "NONE") .. " ]")
@@ -1075,8 +1201,16 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
 
     ---------------------------------------------------------- Terminal
     function Section:CreateTerminal(height)
-        local TermFrame = makeRow(ControlsHolder, "Frame", height or 130, {})
-        TermFrame.BackgroundColor3 = Color3.fromRGB(6, 7, 10)
+        Section._n = Section._n + 1
+        local Wrap = create("Frame", {
+            Size = UDim2.new(1, 0, 0, (height or 130) + 20), BackgroundTransparency = 1, LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
+        }, { create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }) })
+        local TermFrame = create("Frame", {
+            Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(10, 11, 14), ZIndex = 16, Parent = Wrap,
+        }, {
+            create("UICorner", { CornerRadius = rad("InputRadius") }),
+            create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }),
+        })
         local TermScroll = create("ScrollingFrame", {
             Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScrollBarThickness = 3,
             ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(), ZIndex = 17, Parent = TermFrame,
@@ -1087,9 +1221,8 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
             count = count + 1
             create("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1,
-                Text = string.format("[%s] > %s", os.date("%X"), tostring(msg)),
-                Font = Novier.Config.FontCode, TextSize = 11, TextColor3 = color or Novier.Theme.TextTerminal,
-                TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = count, ZIndex = 18, Parent = TermScroll,
+                Text = string.format("[%s] > %s", os.date("%X"), tostring(msg)), Font = S("FontCode"), TextSize = 11,
+                TextColor3 = color or Novier.Theme.Accent, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = count, ZIndex = 18, Parent = TermScroll,
             })
             if count > 150 then
                 local oldest
@@ -1103,7 +1236,7 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         end
         append("SUB-MODULE ONLINE.", Novier.Theme.Accent)
         return {
-            Log   = function(_, m) append(m, Novier.Theme.TextTerminal) end,
+            Log   = function(_, m) append(m, Novier.Theme.Accent) end,
             Warn  = function(_, m) append(m, Novier.Theme.Warning) end,
             Error = function(_, m) append(m, Novier.Theme.Error) end,
             Clear = function(_)
@@ -1114,21 +1247,248 @@ local function buildSection(parentContainer, sectionName, overlayLayer)
         }
     end
 
-    ---------------------------------------------------------- Label / Separator
+    ---------------------------------------------------------- Label / Separator / Custom
     function Section:CreateLabel(text)
+        Section._n = Section._n + 1
         local L = create("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
-            Text = text, TextWrapped = true, Font = Novier.Config.FontNormal, TextSize = 12,
-            TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16, Parent = ControlsHolder,
-        })
+            Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Text = text,
+            TextWrapped = true, Font = S("Font"), TextSize = tsize(-1), TextColor3 = T("TextSecondary"),
+            TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
+        }, { create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }) })
         return { Set = function(_, t) L.Text = t end }
     end
 
     function Section:CreateSeparator()
+        Section._n = Section._n + 1
         create("Frame", {
-            Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = T("BorderSubtle"),
-            BorderSizePixel = 0, BackgroundTransparency = 0.3, ZIndex = 16, Parent = ControlsHolder,
+            Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = T("Divider"), BorderSizePixel = 0,
+            LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
         })
+    end
+
+    -- A padded empty frame for your own widgets
+    function Section:CreateCustom(height)
+        Section._n = Section._n + 1
+        local Holder = create("Frame", {
+            Size = UDim2.new(1, 0, 0, height or 100), BackgroundTransparency = 1, LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
+        }, { create("UIPadding", { PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }) })
+        return Holder
+    end
+
+    ---------------------------------------------------------- Theme swatch grid
+    function Section:CreateThemeGrid(opts)
+        Section._n = Section._n + 1
+        local Grid = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+            LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
+        }, {
+            create("UIGridLayout", { CellSize = UDim2.new(0.245, -6, 0, 64), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+            create("UIPadding", { PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
+        })
+        local order = { Adwaita = 1, Cyber = 2, Terminal = 3 }
+        local names = {}
+        for n in pairs(Novier.Themes) do table.insert(names, n) end
+        table.sort(names, function(a, b)
+            local fa, fb = order[Novier.Themes[a].Family or "Cyber"] or 9, order[Novier.Themes[b].Family or "Cyber"] or 9
+            if fa ~= fb then return fa < fb end
+            return a < b
+        end)
+
+        local cells = {}
+        for i, n in ipairs(names) do
+            local t = Novier.Themes[n]
+            local Cell = create("TextButton", {
+                LayoutOrder = i, BackgroundColor3 = t.DrawerBackground, Text = "", AutoButtonColor = false, ZIndex = 17, Parent = Grid,
+            }, { create("UICorner", { CornerRadius = rad("ButtonRadius") }) })
+            local stroke = create("UIStroke", { Thickness = 1, Color = t.BorderSubtle, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = Cell })
+            create("Frame", { Size = UDim2.fromOffset(10, 10), Position = UDim2.fromOffset(9, 9), BackgroundColor3 = t.Accent, BorderSizePixel = 0, ZIndex = 18, Parent = Cell },
+                { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+            create("TextLabel", {
+                Size = UDim2.new(1, -30, 0, 14), Position = UDim2.fromOffset(25, 7), BackgroundTransparency = 1, Text = n,
+                Font = S("FontBold"), TextSize = 11, TextColor3 = t.TextPrimary, TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18, Parent = Cell,
+            })
+            create("Frame", { Size = UDim2.new(0.6, 0, 0, 9), Position = UDim2.new(0, 9, 1, -32), BackgroundColor3 = t.SurfaceElevated, BorderSizePixel = 0, ZIndex = 18, Parent = Cell },
+                { create("UICorner", { CornerRadius = UDim.new(0, 4) }) })
+            create("Frame", { Size = UDim2.new(0.35, 0, 0, 9), Position = UDim2.new(0, 9, 1, -19), BackgroundColor3 = t.SurfaceHighlight, BorderSizePixel = 0, ZIndex = 18, Parent = Cell },
+                { create("UICorner", { CornerRadius = UDim.new(0, 4) }) })
+            create("Frame", { Size = UDim2.fromOffset(22, 9), Position = UDim2.new(1, -31, 1, -19), BackgroundColor3 = t.AccentGlow, BorderSizePixel = 0, ZIndex = 18, Parent = Cell },
+                { create("UICorner", { CornerRadius = UDim.new(0, 4) }) })
+            cells[n] = stroke
+            track(Cell.MouseButton1Click:Connect(function() sfx("click"); Novier:SetTheme(n) end))
+        end
+        local function mark()
+            for n, stroke in pairs(cells) do
+                local sel = (n == Novier.ThemeName)
+                stroke.Thickness = sel and 2.5 or 1
+                stroke.Color = sel and Novier.Themes[n].Accent or Novier.Themes[n].BorderSubtle
+            end
+        end
+        mark()
+        table.insert(ThemeHooks, mark)
+        registerFlag(opts, function() return Novier.ThemeName end, function(v) Novier:SetTheme(tostring(v)) end)
+    end
+
+    ---------------------------------------------------------- Player list (dynamic)
+    -- cfg = { IncludeSelf = true, Actions = { {"Name", function(player) end}, ... },
+    --         OnSelect = function(player) end, Subtitle = function(player) return "text" end }
+    function Section:CreatePlayerList(cfg)
+        cfg = cfg or {}
+        local includeSelf = cfg.IncludeSelf ~= false
+        local actions = cfg.Actions or {}
+        local List = { Entries = {}, Selected = nil }
+
+        local SearchRow = makeRow(Section, "Frame", 36, {})
+        create("TextLabel", {
+            Size = UDim2.fromOffset(22, 22), Position = UDim2.new(0, 0, 0.5, -11), BackgroundTransparency = 1, Text = "🔍",
+            Font = S("Font"), TextSize = 13, TextColor3 = T("TextSecondary"), ZIndex = 17, Parent = SearchRow,
+        })
+        local Search = create("TextBox", {
+            Size = UDim2.new(1, -30, 1, 0), Position = UDim2.fromOffset(30, 0), BackgroundTransparency = 1, PlaceholderText = "Search players",
+            PlaceholderColor3 = T("TextDisabled"), Text = "", ClearTextOnFocus = false, Font = S("Font"), TextSize = tsize(0),
+            TextColor3 = T("TextPrimary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 17, Parent = SearchRow,
+        })
+
+        Section._n = Section._n + 1
+        local Holder = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = Section._n, ZIndex = 16, Parent = Controls,
+        }, { create("UIListLayout", { Padding = F(function(_, s) return UDim.new(0, s.RowGap) end), SortOrder = Enum.SortOrder.LayoutOrder }) })
+        local Empty = create("TextLabel", {
+            LayoutOrder = 99999, Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, Text = "No other players in this server yet.",
+            Font = S("Font"), TextSize = tsize(-1), TextColor3 = T("TextSecondary"), Visible = false, ZIndex = 16, Parent = Holder,
+        })
+
+        local function layout()
+            local idx = 0
+            local list = {}
+            for _, e in pairs(List.Entries) do table.insert(list, e) end
+            table.sort(list, function(a, b) return a.Root.LayoutOrder < b.Root.LayoutOrder end)
+            for _, e in ipairs(list) do
+                idx = idx + 1
+                e.Divider.Visible = idx > 1 and Novier.Style.Dividers
+            end
+        end
+
+        local function select(uid)
+            local prev = List.Entries[List.Selected]
+            if prev then prev.Actions.Visible = false; prev.Arrow.Text = "▸" end
+            if List.Selected == uid then List.Selected = nil return end
+            local e = List.Entries[uid]
+            if not e then return end
+            List.Selected = uid
+            e.Actions.Visible = true
+            e.Arrow.Text = "▾"
+            safe(cfg.OnSelect, e.Player)
+        end
+
+        local function buildEntry(p)
+            local E = { Player = p }
+            E.Root = create("Frame", {
+                Name = tostring(p.UserId), Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1, ZIndex = 16, Parent = Holder,
+            }, { create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }) })
+            local Head, stroke, hover = makeRow(Section, "TextButton", 56, { Text = "", AutoButtonColor = false },
+                { parent = E.Root, height = 56, count = false, divider = false, order = 1 })
+            E.Divider = create("Frame", {
+                Position = UDim2.fromOffset(-14, 0), Size = UDim2.new(1, 28, 0, 1), BackgroundColor3 = T("Divider"),
+                BorderSizePixel = 0, ZIndex = 17, Visible = false, Parent = Head,
+            })
+            hoverFx(Head, stroke, hover)
+            create("ImageLabel", {
+                Size = UDim2.fromOffset(36, 36), Position = UDim2.new(0, 0, 0.5, -18), BackgroundColor3 = T("SurfaceHighlight"),
+                Image = "rbxthumb://type=AvatarHeadShot&id=" .. p.UserId .. "&w=100&h=100", ZIndex = 17, Parent = Head,
+            }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+            create("TextLabel", {
+                Size = UDim2.new(1, -120, 0, 18), Position = UDim2.fromOffset(46, 9), BackgroundTransparency = 1, Text = p.DisplayName,
+                Font = S("FontBold"), TextSize = tsize(0), TextColor3 = T("TextPrimary"), TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 17, Parent = Head,
+            })
+            local subText = cfg.Subtitle and cfg.Subtitle(p) or ("@" .. p.Name .. "  ·  " .. p.UserId)
+            create("TextLabel", {
+                Size = UDim2.new(1, -120, 0, 14), Position = UDim2.fromOffset(46, 28), BackgroundTransparency = 1, Text = subText,
+                Font = S("Font"), TextSize = tsize(-2), TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 17, Parent = Head,
+            })
+            if p == LocalPlayer then
+                create("TextLabel", {
+                    Size = UDim2.fromOffset(40, 18), Position = UDim2.new(1, -64, 0.5, -9), BackgroundColor3 = T("Accent"), BackgroundTransparency = 0.8,
+                    Text = "YOU", Font = S("FontBold"), TextSize = 10, TextColor3 = T("Accent"), ZIndex = 17, Parent = Head,
+                }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+            end
+            E.Arrow = create("TextLabel", {
+                Size = UDim2.fromOffset(16, 56), Position = UDim2.new(1, -16, 0, 0), BackgroundTransparency = 1, Text = "▸",
+                Font = S("FontBold"), TextSize = 12, TextColor3 = T("TextSecondary"), ZIndex = 17, Parent = Head,
+            })
+            E.Actions = create("Frame", {
+                LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1,
+                Visible = false, ZIndex = 16, Parent = E.Root,
+            }, {
+                create("UIPadding", { PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }),
+                create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Wraps = true, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+            })
+            for i, a in ipairs(actions) do
+                local label, fn = a.Name or a[1], a.Callback or a[2]
+                local b = create("TextButton", {
+                    LayoutOrder = i, Size = UDim2.fromOffset(0, 32), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = T("SurfaceHighlight"),
+                    Text = tostring(label), Font = S("FontBold"), TextSize = tsize(-1), TextColor3 = T("TextPrimary"), AutoButtonColor = false, ZIndex = 18, Parent = E.Actions,
+                }, { create("UICorner", { CornerRadius = rad("ButtonRadius") }), create("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }) })
+                track(b.MouseEnter:Connect(function() tween(b, { BackgroundColor3 = Novier.Theme.Accent, TextColor3 = Novier.Theme.AccentText }, 0.12) end))
+                track(b.MouseLeave:Connect(function() tween(b, { BackgroundColor3 = Novier.Theme.SurfaceHighlight, TextColor3 = Novier.Theme.TextPrimary }, 0.12) end))
+                track(b.MouseButton1Click:Connect(function() sfx("click"); safe(fn, p) end))
+            end
+            track(Head.MouseButton1Click:Connect(function() sfx("click"); select(p.UserId) end))
+            List.Entries[p.UserId] = E
+            return E
+        end
+
+        local function applyFilter()
+            local q = string.lower(Search.Text)
+            for _, e in pairs(List.Entries) do
+                local hay = string.lower(e.Player.DisplayName .. " " .. e.Player.Name)
+                e.Root.Visible = (q == "") or (string.find(hay, q, 1, true) ~= nil)
+            end
+        end
+
+        local function refresh()
+            local plrs = Players:GetPlayers()
+            table.sort(plrs, function(a, b)
+                if a == LocalPlayer then return true end
+                if b == LocalPlayer then return false end
+                return string.lower(a.DisplayName) < string.lower(b.DisplayName)
+            end)
+            local seen, idx = {}, 0
+            for _, p in ipairs(plrs) do
+                if includeSelf or p ~= LocalPlayer then
+                    idx = idx + 1
+                    seen[p.UserId] = true
+                    local e = List.Entries[p.UserId] or buildEntry(p)
+                    e.Root.LayoutOrder = idx
+                end
+            end
+            for uid, e in pairs(List.Entries) do
+                if not seen[uid] then
+                    e.Root:Destroy()
+                    List.Entries[uid] = nil
+                    if List.Selected == uid then List.Selected = nil end
+                end
+            end
+            Empty.Visible = idx == 0 or (idx == 1 and includeSelf and plrs[1] == LocalPlayer)
+            Search.PlaceholderText = "Search " .. idx .. " player" .. (idx == 1 and "" or "s")
+            layout()
+            applyFilter()
+        end
+
+        track(Search:GetPropertyChangedSignal("Text"):Connect(applyFilter))
+        track(Players.PlayerAdded:Connect(function() task.delay(0.15, refresh) end))
+        track(Players.PlayerRemoving:Connect(function() task.delay(0.2, refresh) end))
+        table.insert(ThemeHooks, layout)
+        if Section._owner and Section._owner.OnOpen then Section._owner:OnOpen(refresh) end -- refresh on every tab open
+
+        List.Refresh = function(_) refresh() end
+        List.GetSelected = function(_) local e = List.Entries[List.Selected]; return e and e.Player or nil end
+        List.Select = function(_, plr) if plr then select(plr.UserId) end end
+        refresh()
+        return List
     end
 
     return Section
@@ -1169,9 +1529,10 @@ function Novier:LoadConfig(name)
     if not isfile(path) then return false, "config not found" end
     local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
     if not ok or type(data) ~= "table" then return false, "config corrupted" end
+    if data.ui_theme and Novier._FlagSetters.ui_theme then pcall(Novier._FlagSetters.ui_theme, data.ui_theme) end -- theme first
     for flag, value in pairs(data) do
         local setter = Novier._FlagSetters[flag]
-        if setter then pcall(setter, value) end
+        if setter and flag ~= "ui_theme" then pcall(setter, value) end
     end
     return true
 end
@@ -1181,11 +1542,12 @@ end
 --========================================================--
 function Novier:CreateWindow(windowTitle)
     if Novier._Gui then Novier:Destroy() end
+    windowTitle = windowTitle or "NOVIER // ISLAND"
 
     local Window = {
         Tabs = {}, ActiveTab = nil, IsOpen = true, DrawerOpen = false,
         ToggleKey = Novier.Config.DefaultToggleKey, FovKey = Novier.Config.DefaultFovKey,
-        _tickers = {}, _beatListeners = {},
+        _tickers = {}, _frameHooks = {}, _beatListeners = {},
     }
 
     local Gui = create("ScreenGui", {
@@ -1204,95 +1566,159 @@ function Novier:CreateWindow(windowTitle)
     buildTooltip(OverlayLayer)
 
     local cfg = Novier.Config
-    local function pillCloseY() return -(cfg.PillHeight * computeScale()) - 20 end
+    local function pillClosePos() return UDim2.new(0.5, 0, 0, -(cfg.PillHeight * computeScale()) - 20) end
     local pillOpenPos = UDim2.new(0.5, 0, 0, 16)
-    local function pillClosePos() return UDim2.new(0.5, 0, 0, pillCloseY()) end
     local function drawerOpenPos() return UDim2.new(0.5, 0, 0, math.floor(16 + cfg.PillHeight * computeScale() + 10)) end
     local function drawerClosePos() return UDim2.new(0.5, 0, 0, math.floor(cfg.PillHeight * computeScale() - 10)) end
 
     ------------------------------------------------ THE PILL
-    local PillStroke = create("UIStroke", {
-        Name = "PillStroke", Thickness = 1.6, Color = Color3.new(1, 1, 1),
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-    })
+    local PillStroke = create("UIStroke", { Name = "PillStroke", Thickness = 1.4, Color = Color3.new(1, 1, 1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
     local PillGradient = create("UIGradient", { Color = accentSequence(), Parent = PillStroke })
 
     local Pill = create("Frame", {
-        Name = "PillBar",
-        Size = UDim2.fromOffset(cfg.PillHeight, cfg.PillHeight), -- grows in the intro animation
-        Position = pillOpenPos,
-        AnchorPoint = Vector2.new(0.5, 0),
-        BackgroundColor3 = T("PillBackground"),
-        BorderSizePixel = 0,
-        ClipsDescendants = true,
-        ZIndex = 100,
-        Parent = Gui,
+        Name = "PillBar", Size = UDim2.fromOffset(cfg.PillHeight, cfg.PillHeight), Position = pillOpenPos,
+        AnchorPoint = Vector2.new(0.5, 0), BackgroundColor3 = T("PillBackground"), BorderSizePixel = 0,
+        ClipsDescendants = true, ZIndex = 100, Parent = Gui,
     }, {
-        create("UICorner", { CornerRadius = UDim.new(1, 0) }),
+        create("UICorner", { CornerRadius = rad("PillRadius") }),
         PillStroke,
-        create("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16) }),
+        create("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 12) }),
     })
     addScale(Pill)
 
-    -- Brand
-    local BrandHolder = create("Frame", {
-        Size = UDim2.new(0, 160, 1, 0), BackgroundTransparency = 1, ZIndex = 101, Parent = Pill,
-    }, { create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8) }) })
+    -- Brand + live stats (left)
+    local Brand = create("Frame", { Size = UDim2.new(0, 160, 1, 0), BackgroundTransparency = 1, ZIndex = 101, Parent = Pill })
     create("TextLabel", {
-        Size = UDim2.fromOffset(26, 26), BackgroundColor3 = T("SurfaceElevated"), Text = "⚡",
-        Font = Novier.Config.FontBold, TextSize = 13, TextColor3 = T("Accent"), ZIndex = 102, Parent = BrandHolder,
+        Size = UDim2.fromOffset(28, 28), Position = UDim2.new(0, 0, 0.5, -14), BackgroundColor3 = T("SurfaceElevated"),
+        Text = S("BrandIcon"), Font = S("FontBold"), TextSize = 14, TextColor3 = T("Accent"), ZIndex = 102, Parent = Brand,
     }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Thickness = 1, Color = T("Accent") }) })
     create("TextLabel", {
-        Size = UDim2.new(1, -34, 1, 0), BackgroundTransparency = 1,
-        Text = string.upper(windowTitle or "NOVIER // ISLAND"), Font = Novier.Config.FontBold, TextSize = 12,
-        TextColor3 = T("TextPrimary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102, Parent = BrandHolder,
+        Size = UDim2.new(1, -38, 0, 18), Position = UDim2.fromOffset(38, 6), BackgroundTransparency = 1,
+        Text = F(function(_, s) return s.Upper and string.upper(windowTitle) or windowTitle end),
+        Font = S("FontBold"), TextSize = 12, TextColor3 = T("TextPrimary"), TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 102, Parent = Brand,
     })
-
-    -- Live stats (FPS / ping)
     local StatsLabel = create("TextLabel", {
-        Size = UDim2.new(0, 120, 1, 0), Position = UDim2.fromOffset(176, 0), BackgroundTransparency = 1,
-        Text = "", Font = Novier.Config.FontCode, TextSize = 10, TextColor3 = T("TextSecondary"),
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102, Parent = Pill,
+        Size = UDim2.new(1, -38, 0, 14), Position = UDim2.fromOffset(38, 24), BackgroundTransparency = 1, Text = "",
+        Font = S("FontCode"), TextSize = 10, TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102, Parent = Brand,
     })
 
-    -- Center visualizer
+    -- Mini synth (fixed on the left so tabs can never overlap it)
+    local VN = 14
     local VisualizerHolder = create("Frame", {
-        Name = "PillVisualizer", Size = UDim2.fromOffset(140, 24), Position = UDim2.new(0.5, -70, 0.5, -12),
-        BackgroundTransparency = 1, ZIndex = 101, Parent = Pill,
-    }, { create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 2) }) })
+        Name = "PillVisualizer", Size = UDim2.fromOffset(92, 24), Position = UDim2.new(0, 170, 0.5, -12), BackgroundTransparency = 1, ZIndex = 101, Parent = Pill,
+    })
     local VisualizerBars = {}
-    for i = 1, 16 do
+    for i = 1, VN do
         VisualizerBars[i] = create("Frame", {
-            Size = UDim2.fromOffset(3, 4), BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0, ZIndex = 102, Parent = VisualizerHolder,
+            AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, (i - 1) * 6.5, 0.5, 0), Size = UDim2.fromOffset(4, 4),
+            BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0, ZIndex = 102, Parent = VisualizerHolder,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
     end
 
-    -- Tab bar
-    local TabBar = create("Frame", {
-        Size = UDim2.new(0.48, 0, 1, 0), Position = UDim2.new(0.52, 0, 0, 0), BackgroundTransparency = 1, ZIndex = 101, Parent = Pill,
-    }, { create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6) }) })
-
-    ------------------------------------------------ DRAWER
-    local DrawerStroke = create("UIStroke", { Thickness = 1.4, Color = T("BorderSubtle") })
-    local Drawer = create("Frame", {
-        Name = "PillDrawer",
-        Size = UDim2.fromOffset(cfg.DrawerWidth, cfg.DrawerHeight),
-        Position = drawerClosePos(),
-        AnchorPoint = Vector2.new(0.5, 0),
-        BackgroundColor3 = T("DrawerBackground"),
-        BorderSizePixel = 0, ClipsDescendants = true, Visible = false, ZIndex = 10, Parent = Gui,
-    }, {
-        create("UICorner", { CornerRadius = UDim.new(0, 16) }),
-        DrawerStroke,
-        create("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingTop = UDim.new(0, 16), PaddingBottom = UDim.new(0, 16) }),
+    -- Scrolling tab region (right): scroller + arrow buttons
+    local TabRegion = create("Frame", {
+        Name = "TabRegion", Size = UDim2.new(1, -274, 1, 0), Position = UDim2.fromOffset(274, 0),
+        BackgroundTransparency = 1, ZIndex = 101, Parent = Pill,
     })
+    local Scroller = create("ScrollingFrame", {
+        Name = "TabScroller", Size = UDim2.new(1, -58, 1, 0), BackgroundTransparency = 1, ScrollBarThickness = 0,
+        ScrollingDirection = Enum.ScrollingDirection.X, AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(),
+        ClipsDescendants = true, ZIndex = 101, Parent = TabRegion,
+    }, {
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+        create("UIPadding", { PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2) }),
+    })
+    local function arrow(text, xOff)
+        return create("TextButton", {
+            Size = UDim2.fromOffset(24, 24), Position = UDim2.new(1, xOff, 0.5, -12), BackgroundColor3 = T("SurfaceElevated"),
+            Text = text, Font = S("FontBold"), TextSize = 16, TextColor3 = T("TextPrimary"), AutoButtonColor = false, Visible = false, ZIndex = 103, Parent = TabRegion,
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+    end
+    local LeftArrow, RightArrow = arrow("‹", -54), arrow("›", -26)
+
+    local function maxScroll() return math.max(0, Scroller.AbsoluteCanvasSize.X - Scroller.AbsoluteWindowSize.X) / computeScale() end
+    local function updateArrows()
+        local m = maxScroll()
+        local x = Scroller.CanvasPosition.X
+        local overflow = m > 1
+        LeftArrow.Visible, RightArrow.Visible = overflow, overflow
+        LeftArrow.TextTransparency = (x > 1) and 0 or 0.65
+        RightArrow.TextTransparency = (x < m - 1) and 0 or 0.65
+    end
+    local function scrollBy(dx)
+        local target = math.clamp(Scroller.CanvasPosition.X + dx, 0, maxScroll())
+        tween(Scroller, { CanvasPosition = Vector2.new(target, 0) }, 0.25)
+    end
+    track(Scroller:GetPropertyChangedSignal("CanvasPosition"):Connect(updateArrows))
+    track(Scroller:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(updateArrows))
+    track(Scroller:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateArrows))
+    track(LeftArrow.MouseButton1Click:Connect(function() sfx("click"); scrollBy(-160) end))
+    track(RightArrow.MouseButton1Click:Connect(function() sfx("click"); scrollBy(160) end))
+    track(UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseWheel and Pill.Visible then
+            if pointIn(TabRegion, UserInputService:GetMouseLocation()) then scrollBy(-input.Position.Z * 90) end
+        end
+    end))
+
+    local function ensureVisible(btn)
+        task.defer(function()
+            local sc = computeScale()
+            local left = (btn.AbsolutePosition.X - Scroller.AbsolutePosition.X) / sc + Scroller.CanvasPosition.X
+            local w = btn.AbsoluteSize.X / sc
+            local view = Scroller.AbsoluteWindowSize.X / sc
+            local cur = Scroller.CanvasPosition.X
+            local target = cur
+            if left < cur then target = left - 8 elseif left + w > cur + view then target = left + w - view + 8 end
+            if target ~= cur then tween(Scroller, { CanvasPosition = Vector2.new(math.max(0, target), 0) }, 0.25) end
+        end)
+    end
+
+    ------------------------------------------------ DRAWER (GNOME header bar + content)
+    local DrawerStroke = create("UIStroke", { Thickness = F(function(_, s) return s.DrawerStroke end), Color = T("BorderSubtle"), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local Drawer = create("Frame", {
+        Name = "PillDrawer", Size = UDim2.fromOffset(cfg.DrawerWidth, cfg.DrawerHeight), Position = drawerClosePos(),
+        AnchorPoint = Vector2.new(0.5, 0), BackgroundColor3 = T("DrawerBackground"), BorderSizePixel = 0,
+        ClipsDescendants = true, Visible = false, ZIndex = 10, Parent = Gui,
+    }, { create("UICorner", { CornerRadius = rad("DrawerRadius") }), DrawerStroke })
     addScale(Drawer)
 
-    -- Touch users have no keyboard: floating toggle button
-    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+    local HeaderBar = create("Frame", {
+        Name = "HeaderBar", Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = T("HeaderBackground"), BorderSizePixel = 0, ZIndex = 20, Parent = Drawer,
+    }, { create("UICorner", { CornerRadius = rad("DrawerRadius") }) })
+    create("Frame", { -- squares off the header's lower corners
+        Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 1, -22), BackgroundColor3 = T("HeaderBackground"), BorderSizePixel = 0, ZIndex = 20, Parent = HeaderBar,
+    })
+    create("Frame", {
+        Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = T("Divider"), BorderSizePixel = 0, ZIndex = 21, Parent = HeaderBar,
+    })
+    local currentTabName = ""
+    local function titleText()
+        local s = Novier.Style
+        return s.TitlePrefix .. (s.Upper and string.upper(currentTabName) or currentTabName)
+    end
+    local DrawerTitle = create("TextLabel", {
+        Size = UDim2.new(1, -70, 1, 0), Position = UDim2.fromOffset(18, 0), BackgroundTransparency = 1, Text = "",
+        Font = S("FontBold"), TextSize = F(function(_, s) return s.TitleSize + 4 end),
+        TextColor3 = F(function(th, s) return s.TitleAccent and th.Accent or th.TextPrimary end),
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 22, Parent = HeaderBar,
+    })
+    local CloseBtn = create("TextButton", {
+        Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -40, 0.5, -14), BackgroundColor3 = T("SurfaceHighlight"),
+        BackgroundTransparency = 0.4, Text = "✕", Font = S("FontBold"), TextSize = 12, TextColor3 = T("TextPrimary"), AutoButtonColor = false, ZIndex = 22, Parent = HeaderBar,
+    }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+    track(CloseBtn.MouseEnter:Connect(function() tween(CloseBtn, { BackgroundTransparency = 0 }, 0.12) end))
+    track(CloseBtn.MouseLeave:Connect(function() tween(CloseBtn, { BackgroundTransparency = 0.4 }, 0.12) end))
+    table.insert(ThemeHooks, function() DrawerTitle.Text = titleText() end)
+
+    local Content = create("Frame", {
+        Name = "Content", Size = UDim2.new(1, 0, 1, -46), Position = UDim2.fromOffset(0, 46), BackgroundTransparency = 1, ZIndex = 11, Parent = Drawer,
+    })
+
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then -- touch toggle button
         local TouchBtn = create("TextButton", {
             Size = UDim2.fromOffset(44, 44), Position = UDim2.new(0, 12, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
-            BackgroundColor3 = T("PillBackground"), Text = "⚡", Font = Novier.Config.FontBold, TextSize = 18,
+            BackgroundColor3 = T("PillBackground"), Text = S("BrandIcon"), Font = S("FontBold"), TextSize = 18,
             TextColor3 = T("Accent"), AutoButtonColor = false, ZIndex = 300, Parent = Gui,
         }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }), create("UIStroke", { Thickness = 1.5, Color = T("Accent") }) })
         track(TouchBtn.MouseButton1Click:Connect(function() Window:SetVisible() end))
@@ -1303,7 +1729,6 @@ function Novier:CreateWindow(windowTitle)
         Name = "NovierAudioStream", Volume = 0.5, Looped = true, SoundId = "rbxassetid://9043887091", Parent = SoundService,
     })
     Window.Sound = ActiveSound
-
     local An = Analyzer.new()
     Window.Analyzer = An
 
@@ -1318,16 +1743,13 @@ function Novier:CreateWindow(windowTitle)
     local fps, ping = 60, 0
     local fovOffset, fovActive = 0, false
     local FOV = Novier.FOVConfig
-
     table.insert(ThemeHooks, function() PillGradient.Color = accentSequence() end)
 
     track(RunService.RenderStepped:Connect(function(dt)
-        -- FPS meter
         fpsAcc = fpsAcc + dt
         fpsFrames = fpsFrames + 1
         if fpsAcc >= 0.5 then fps = fpsFrames / fpsAcc; fpsAcc, fpsFrames = 0, 0 end
 
-        -- Beat-synced FOV kick (only touches the camera while active / easing out)
         local cam = Workspace.CurrentCamera
         if cam then
             if FOV.Enabled and ActiveSound.IsPlaying then
@@ -1347,61 +1769,59 @@ function Novier:CreateWindow(windowTitle)
             end
         end
 
-        -- Visual update throttle
         acc = acc + dt
         if acc < 1 / math.max(20, Novier.Settings.VisualHz) then return end
         local vdt = acc
         acc = 0
 
-        An:Update(vdt, ActiveSound, Novier.Settings)
-        local S = Novier.Settings
-        local th = Novier.Theme
+        local Opt, st, th = Novier.Settings, Novier.Style, Novier.Theme
+        An:Update(vdt, ActiveSound, Opt)
+        local pulse = st.Pulse * Opt.Pulse
 
         if An.beatFired then
             for _, fn in ipairs(Window._beatListeners) do safe(fn, An.beat, An.bpm) end
-            if S.Rings and Window.IsOpen then spawnRing(Gui, Pill, An.bass) end
+            if Opt.Rings and Window.IsOpen then spawnRing(Gui, Pill, An.bass, pulse) end
         end
 
-        -- Layers
-        if Rain.Root.Visible ~= S.Rain then Rain.Root.Visible = S.Rain end
-        if S.Rain then Rain.Update(vdt, An) end
-        if Edges.Root.Visible ~= S.EdgeVisuals then Edges.Root.Visible = S.EdgeVisuals end
-        if S.EdgeVisuals then Edges.Update(An) end
+        if Rain.Root.Visible ~= Opt.Rain then Rain.Root.Visible = Opt.Rain end
+        if Opt.Rain then Rain.Update(vdt, An) end
+        if HUD.Root.Visible ~= st.HUD then HUD.Root.Visible = st.HUD end
+        if Edges.Root.Visible ~= Opt.EdgeVisuals then Edges.Root.Visible = Opt.EdgeVisuals end
+        if Opt.EdgeVisuals then Edges.Update(An, pulse, Opt.EdgeSize) end
 
-        -- Pill border: rotating gradient, speed & thickness ride the music
-        PillGradient.Rotation = (PillGradient.Rotation + vdt * (35 + An.bass * 260 + An.beat * 180)) % 360
-        PillStroke.Thickness = 1.6 + An.bass * 1.4 + An.beat * 0.9
+        PillGradient.Rotation = (PillGradient.Rotation + vdt * (25 + (An.bass * 200 + An.beat * 140) * pulse)) % 360
+        PillStroke.Thickness = st.PillStroke + (An.bass * 1.2 + An.beat * 0.8) * pulse
         if Window.DrawerOpen then
-            DrawerStroke.Color = th.BorderSubtle:Lerp(th.Accent, math.clamp(An.bass * 0.7 + An.beat * 0.3, 0, 1))
+            DrawerStroke.Color = th.BorderSubtle:Lerp(th.Accent, math.clamp((An.bass * 0.6 + An.beat * 0.3) * pulse, 0, 1))
         end
 
-        -- Pill mini waveform (center-symmetric, same source as the edges)
         for i, bar in ipairs(VisualizerBars) do
-            local c = math.abs(((i - 0.5) / 16) * 2 - 1)
-            local v = An:Sample(c)
-            bar.Size = UDim2.fromOffset(3, math.max(3, math.floor(3 + v * 21)))
+            local v = An:Sample((i - 1) / (VN - 1))
+            bar.Size = UDim2.fromOffset(4, math.max(4, math.floor(4 + v * 20)))
             bar.BackgroundColor3 = spectrumColor(v)
         end
 
-        -- HUD + stats at 4 Hz
+        for _, fn in ipairs(Window._frameHooks) do safe(fn, An, vdt) end
+
         hudAcc = hudAcc + vdt
         if hudAcc >= 0.25 then
             hudAcc = 0
             ping = getPing()
-            StatsLabel.Visible = S.ShowStats
+            StatsLabel.Visible = Opt.ShowStats
             StatsLabel.Text = string.format("%d FPS · %dms", fps, ping)
-
-            local meter = math.clamp(math.floor(An.level * 8 + 0.5), 0, 8)
-            HUD.TL.Text = "┌── [ISLAND: DYNAMIC]\n│ THEME: " .. string.upper(Novier.ThemeName)
-            HUD.TR.Text = "[NOVIER // ZERO-DAY] ──┐\nBPM " .. (An.bpm > 1 and tostring(math.floor(An.bpm + 0.5)) or "--") .. " │"
-            HUD.BR.Text = string.format("LVL %s%s\n%d FPS │ %dms ──┘", string.rep("▮", meter), string.rep("▯", 8 - meter), fps, ping)
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local p = hrp.Position
-                HUD.BL.Text = string.format("│ POS: %.1f, %.1f, %.1f\n└── [BEAT FOV: %s]", p.X, p.Y, p.Z, FOV.Enabled and "ON" or "OFF")
-            else
-                HUD.BL.Text = "│ POS: --\n└── [BEAT FOV: " .. (FOV.Enabled and "ON" or "OFF") .. "]"
+            if st.HUD then
+                local meter = math.clamp(math.floor(An.level * 8 + 0.5), 0, 8)
+                HUD.TL.Text = "┌── [ISLAND: DYNAMIC]\n│ THEME: " .. string.upper(Novier.ThemeName)
+                HUD.TR.Text = "[NOVIER // ZERO-DAY] ──┐\nBPM " .. (An.bpm > 1 and tostring(math.floor(An.bpm + 0.5)) or "--") .. " │"
+                HUD.BR.Text = string.format("LVL %s%s\n%d FPS │ %dms ──┘", string.rep("▮", meter), string.rep("▯", 8 - meter), fps, ping)
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local p = hrp.Position
+                    HUD.BL.Text = string.format("│ POS: %.1f, %.1f, %.1f\n└── [BEAT FOV: %s]", p.X, p.Y, p.Z, FOV.Enabled and "ON" or "OFF")
+                else
+                    HUD.BL.Text = "│ POS: --\n└── [BEAT FOV: " .. (FOV.Enabled and "ON" or "OFF") .. "]"
+                end
             end
             for _, fn in ipairs(Window._tickers) do safe(fn, An, fps, ping) end
         end
@@ -1433,7 +1853,7 @@ function Novier:CreateWindow(windowTitle)
         Drawer.Visible = true
         Drawer.Position = drawerClosePos()
         tween(Drawer, { Position = drawerOpenPos() }, 0.3, Enum.EasingStyle.Back)
-        if Blur and Novier.Settings.Blur then tween(Blur, { Size = 12 }, 0.3) end
+        if Blur and Novier.Settings.Blur then tween(Blur, { Size = 10 }, 0.3) end
     end
 
     function Window:CloseDrawer()
@@ -1443,23 +1863,25 @@ function Novier:CreateWindow(windowTitle)
             t.Page.Visible = false
             t:_paint(false)
         end
+        Window.ActiveTab = nil
         if Blur then tween(Blur, { Size = 0 }, 0.25) end
         DrawerStroke.Color = Novier.Theme.BorderSubtle
-        local tw = tween(Drawer, { Position = drawerClosePos() }, 0.22)
-        tw.Completed:Connect(function()
+        tween(Drawer, { Position = drawerClosePos() }, 0.22).Completed:Connect(function()
             if not Window.DrawerOpen then Drawer.Visible = false end
         end)
     end
+    track(CloseBtn.MouseButton1Click:Connect(function() sfx("click"); Window:CloseDrawer() end))
 
     function Window:SetToggleKey(k) Window.ToggleKey = k end
     function Window:SetFovKey(k) Window.FovKey = k end
     function Window:OnBeat(fn) table.insert(Window._beatListeners, fn) end
-    function Window:AddTicker(fn) table.insert(Window._tickers, fn) end -- fn(analyzer, fps, ping) @ 4 Hz
+    function Window:AddTicker(fn) table.insert(Window._tickers, fn) end       -- fn(analyzer, fps, ping) @ 4 Hz
+    function Window:AddFrameHook(fn) table.insert(Window._frameHooks, fn) end  -- fn(analyzer, dt) every visual frame
     function Window:Destroy() Novier:Destroy() end
 
     track(UserInputService.InputBegan:Connect(function(input, processed)
         if processed or Novier._listening then return end
-        if os.clock() - (Novier._listenStamp or 0) < 0.2 then return end -- key was just captured by a Keybind
+        if os.clock() - (Novier._listenStamp or 0) < 0.2 then return end
         if input.KeyCode == Window.ToggleKey then
             Window:SetVisible()
         elseif input.KeyCode == Window.FovKey then
@@ -1469,37 +1891,42 @@ function Novier:CreateWindow(windowTitle)
     end))
 
     ------------------------------------------------ TABS
+    local function paintTab(btn, active, instant)
+        local s, th = Novier.Style, Novier.Theme
+        tween(btn, {
+            BackgroundColor3 = active and th.SurfaceHighlight or th.SurfaceElevated,
+            BackgroundTransparency = (s.TabFlat and not active) and 1 or 0,
+            TextColor3 = active and (s.TabAccent and th.Accent or th.TextPrimary) or th.TextSecondary,
+        }, instant and 0 or 0.15)
+    end
+
     function Window:CreateTab(tabName, iconSymbol)
-        local Tab = { Active = false }
+        local Tab = { Active = false, _open = {} }
         local displayText = (iconSymbol and iconSymbol ~= "") and (iconSymbol .. " " .. tabName) or tabName
 
         local TabBtn = create("TextButton", {
-            Name = tabName .. "_Tab", Size = UDim2.fromOffset(0, 28), AutomaticSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = Novier.Theme.SurfaceElevated, Text = displayText, Font = Novier.Config.FontBold,
-            TextSize = 11, TextColor3 = Novier.Theme.TextSecondary, AutoButtonColor = false,
-            ClipsDescendants = true, ZIndex = 102, Parent = TabBar,
+            Name = tabName .. "_Tab", Size = UDim2.fromOffset(0, 28), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = #Window.Tabs + 1,
+            BackgroundColor3 = Novier.Theme.SurfaceElevated, Text = displayText, Font = S("FontBold"), TextSize = F(function(_, s) return s.TextSize - 1 end),
+            TextColor3 = Novier.Theme.TextSecondary, AutoButtonColor = false, ClipsDescendants = true, ZIndex = 102, Parent = Scroller,
         }, {
             create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-            create("UIStroke", { Thickness = 1, Color = T("BorderSubtle") }),
-            create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }),
+            create("UIStroke", { Thickness = F(function(_, s) return s.TabFlat and 0 or 1 end), Color = T("BorderSubtle") }),
+            create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
         })
+        paintTab(TabBtn, false, true)
 
-        local PageLayout = create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder })
+        local PageLayout = create("UIListLayout", { Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
         local Page = create("ScrollingFrame", {
-            Name = tabName .. "_Page", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-            ScrollBarThickness = 4, ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(),
-            Visible = false, ZIndex = 13, ClipsDescendants = true, Parent = Drawer,
-        }, { PageLayout, create("UIPadding", { PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 14) }) })
+            Name = tabName .. "_Page", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScrollBarThickness = 3,
+            ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(), Visible = false, ZIndex = 13, ClipsDescendants = true, Parent = Content,
+        }, { PageLayout, create("UIPadding", { PaddingTop = UDim.new(0, 14), PaddingBottom = UDim.new(0, 18), PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 18) }) })
         PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            Page.CanvasSize = UDim2.fromOffset(0, PageLayout.AbsoluteContentSize.Y + 24)
+            Page.CanvasSize = UDim2.fromOffset(0, PageLayout.AbsoluteContentSize.Y + 32)
         end)
 
         function Tab:_paint(active, instant)
             Tab.Active = active
-            tween(TabBtn, {
-                BackgroundColor3 = active and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated,
-                TextColor3 = active and Novier.Theme.Accent or Novier.Theme.TextSecondary,
-            }, instant and 0 or 0.15)
+            paintTab(TabBtn, active, instant)
         end
         table.insert(ThemeHooks, function() Tab:_paint(Tab.Active, true) end)
 
@@ -1511,79 +1938,82 @@ function Novier:CreateWindow(windowTitle)
             if not Tab.Active then tween(TabBtn, { TextColor3 = Novier.Theme.TextSecondary }, 0.12) end
         end))
 
+        function Tab:OnOpen(fn) table.insert(Tab._open, fn) end
+
         local function selectTab()
             ripple(TabBtn); sfx("click")
             if Window.ActiveTab == Tab and Window.DrawerOpen then
                 Window:CloseDrawer()
-                Window.ActiveTab = nil
                 return
             end
             for _, t in ipairs(Window.Tabs) do t.Page.Visible = false; t:_paint(false) end
             Page.Visible = true
             Window.ActiveTab = Tab
             Tab:_paint(true)
+            currentTabName = tabName
+            DrawerTitle.Text = titleText()
+            ensureVisible(TabBtn)
             if not Window.DrawerOpen then Window:OpenDrawer() end
+            for _, fn in ipairs(Tab._open) do safe(fn) end
         end
         track(TabBtn.MouseButton1Click:Connect(selectTab))
 
         Tab.Button, Tab.Page = TabBtn, Page
         table.insert(Window.Tabs, Tab)
 
-        function Tab:CreateSection(sectionName)
-            return buildSection(Page, sectionName, OverlayLayer)
+        function Tab:CreateSection(sectionName) return buildSection(Page, sectionName, OverlayLayer, Tab) end
+
+        -- Convenience: a section holding a dynamic player list
+        function Tab:CreatePlayerList(listCfg, sectionName)
+            local sec = Tab:CreateSection(sectionName or "Players")
+            return sec:CreatePlayerList(listCfg), sec
         end
 
-        -- Scrolling sub-tabs (unlimited players / pages)
+        -- Scrolling sub-tabs
         function Tab:CreateSubTabs(initialList)
             local SubTabSystem = { SubTabs = {}, ActiveSubTab = nil }
-
             local BarLayout = create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6) })
             local SubTabBar = create("ScrollingFrame", {
-                Name = "SubTabBar", Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1,
-                ScrollBarThickness = 3, ScrollBarImageColor3 = T("Accent"),
-                ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.new(),
+                Name = "SubTabBar", Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, ScrollBarThickness = 3,
+                ScrollBarImageColor3 = T("Accent"), ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.new(),
                 ZIndex = 14, ClipsDescendants = true, Parent = Page,
             }, { BarLayout, create("UIPadding", { PaddingBottom = UDim.new(0, 4) }) })
             BarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
                 SubTabBar.CanvasSize = UDim2.fromOffset(BarLayout.AbsoluteContentSize.X + 24, 0)
             end)
-
             local SubPageHolder = create("Frame", {
-                Name = "SubPageHolder", Size = UDim2.new(1, 0, 0, 480), BackgroundTransparency = 1, ZIndex = 13, Parent = Page,
+                Name = "SubPageHolder", Size = UDim2.new(1, 0, 0, cfg.DrawerHeight - 150), BackgroundTransparency = 1, ZIndex = 13, Parent = Page,
             })
 
             local function paintSub(sub, active, instant)
                 sub.Active = active
-                tween(sub.Button, {
-                    BackgroundColor3 = active and Novier.Theme.SurfaceHighlight or Novier.Theme.SurfaceElevated,
-                    TextColor3 = active and Novier.Theme.Accent or Novier.Theme.TextSecondary,
-                }, instant and 0 or 0.12)
+                paintTab(sub.Button, active, instant)
             end
 
             function SubTabSystem:AddSubTab(subName, icon)
                 if SubTabSystem.SubTabs[subName] then return SubTabSystem.SubTabs[subName] end
-                local SubTab = { Active = false }
+                local SubTab = { Active = false, _open = {} }
                 local label = (icon and icon ~= "") and (icon .. " " .. subName) or subName
 
                 local SubBtn = create("TextButton", {
                     Name = subName .. "_SubBtn", Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X,
-                    BackgroundColor3 = Novier.Theme.SurfaceElevated, Text = label, Font = Novier.Config.FontBold,
-                    TextSize = 10, TextColor3 = Novier.Theme.TextSecondary, AutoButtonColor = false,
+                    BackgroundColor3 = Novier.Theme.SurfaceElevated, Text = label, Font = S("FontBold"),
+                    TextSize = F(function(_, s) return s.TextSize - 2 end), TextColor3 = Novier.Theme.TextSecondary, AutoButtonColor = false,
                     ClipsDescendants = true, ZIndex = 15, Parent = SubTabBar,
                 }, {
                     create("UICorner", { CornerRadius = UDim.new(1, 0) }),
-                    create("UIStroke", { Thickness = 1, Color = T("BorderSubtle") }),
-                    create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }),
+                    create("UIStroke", { Thickness = F(function(_, s) return s.TabFlat and 0 or 1 end), Color = T("BorderSubtle") }),
+                    create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }),
                 })
+                paintTab(SubBtn, false, true)
 
-                local SubLayout = create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder })
+                local SubLayout = create("UIListLayout", { Padding = UDim.new(0, 14), SortOrder = Enum.SortOrder.LayoutOrder })
                 local SubPage = create("ScrollingFrame", {
-                    Name = subName .. "_SubPage", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
-                    ScrollBarThickness = 3, ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(),
-                    Visible = false, ZIndex = 13, ClipsDescendants = true, Parent = SubPageHolder,
-                }, { SubLayout, create("UIPadding", { PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 10) }) })
+                    Name = subName .. "_SubPage", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ScrollBarThickness = 3,
+                    ScrollBarImageColor3 = T("Accent"), CanvasSize = UDim2.new(), Visible = false, ZIndex = 13, ClipsDescendants = true, Parent = SubPageHolder,
+                }, { SubLayout, create("UIPadding", { PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 10) }) })
                 SubLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    SubPage.CanvasSize = UDim2.fromOffset(0, SubLayout.AbsoluteContentSize.Y + 20)
+                    SubPage.CanvasSize = UDim2.fromOffset(0, SubLayout.AbsoluteContentSize.Y + 24)
                 end)
 
                 SubTab.Button, SubTab.Page = SubBtn, SubPage
@@ -1596,13 +2026,14 @@ function Novier:CreateWindow(windowTitle)
                     SubPage.Visible = true
                     SubTabSystem.ActiveSubTab = SubTab
                     paintSub(SubTab, true)
-                    -- keep the active pill in view
                     local x = SubBtn.AbsolutePosition.X - SubTabBar.AbsolutePosition.X + SubTabBar.CanvasPosition.X
                     SubTabBar.CanvasPosition = Vector2.new(math.max(0, x - 40), 0)
+                    for _, fn in ipairs(SubTab._open) do safe(fn) end
                 end
                 track(SubBtn.MouseButton1Click:Connect(function() ripple(SubBtn); sfx("click"); activate() end))
 
-                function SubTab:CreateSection(secName) return buildSection(SubPage, secName, OverlayLayer) end
+                function SubTab:OnOpen(fn) table.insert(SubTab._open, fn) end
+                function SubTab:CreateSection(secName) return buildSection(SubPage, secName, OverlayLayer, SubTab) end
 
                 SubTabSystem.SubTabs[subName] = SubTab
                 if not SubTabSystem.ActiveSubTab then activate() end
@@ -1626,19 +2057,21 @@ function Novier:CreateWindow(windowTitle)
                 end
             end
 
-            function SubTabSystem:ClearSubTabs()
-                for _, sub in pairs(SubTabSystem.SubTabs) do sub.Button:Destroy(); sub.Page:Destroy() end
-                table.clear(SubTabSystem.SubTabs)
-                SubTabSystem.ActiveSubTab = nil
+            -- keep: optional list of sub-tab names to leave alone
+            function SubTabSystem:ClearSubTabs(keep)
+                local keepSet = {}
+                for _, n in ipairs(keep or {}) do keepSet[n] = true end
+                local names = {}
+                for name in pairs(SubTabSystem.SubTabs) do
+                    if not keepSet[name] then table.insert(names, name) end
+                end
+                for _, name in ipairs(names) do SubTabSystem:RemoveSubTab(name) end
             end
 
             if type(initialList) == "table" then
                 for _, item in ipairs(initialList) do
-                    if type(item) == "table" then
-                        SubTabSystem:AddSubTab(item.Name or item[1], item.Icon or item[2])
-                    else
-                        SubTabSystem:AddSubTab(tostring(item))
-                    end
+                    if type(item) == "table" then SubTabSystem:AddSubTab(item.Name or item[1], item.Icon or item[2])
+                    else SubTabSystem:AddSubTab(tostring(item)) end
                 end
             end
             return SubTabSystem
@@ -1647,42 +2080,193 @@ function Novier:CreateWindow(windowTitle)
         return Tab
     end
 
-    ------------------------------------------------ MEDIA SUITE
+    ------------------------------------------------ PLAYERS TAB (one call)
+    function Window:CreatePlayersTab(listCfg, tabName)
+        local Tab = Window:CreateTab(tabName or "PLAYERS", "👤")
+        local List, Sec = Tab:CreatePlayerList(listCfg, "Players in this server")
+        return Tab, List, Sec
+    end
+
+    ------------------------------------------------ MEDIA SUITE (now-playing card)
     function Window:CreateMediaSuite(defaultTrackTable)
         local tracks = defaultTrackTable or {
             ["Synth Loop"]        = "rbxassetid://9043887091",
             ["Action Electronic"] = "rbxassetid://1840590064",
             ["Dark Cyber"]        = "rbxassetid://1843404009",
         }
-        local nowPlaying = "—"
+        local names = {}
+        for n in pairs(tracks) do table.insert(names, n) end
+        table.sort(names)
+        local index, loop = 1, true
+        local buttons = {}
 
-        local MediaTab = Window:CreateTab("MEDIA", "♫")
-        local MediaSec = MediaTab:CreateSection("Audio Stream Controller")
-        local NowLabel = MediaSec:CreateLabel("♫ —")
+        local Tab = Window:CreateTab("MEDIA", "♫")
+        local NP = Tab:CreateSection("Now Playing")
+        local Card = NP:CreateCustom(196)
 
-        local trackNames = {}
-        for name in pairs(tracks) do table.insert(trackNames, name) end
-        table.sort(trackNames)
+        local function accentPair()
+            return ColorSequence.new(Novier.Theme.Accent, Novier.Theme.SecondaryAccent)
+        end
+        local ArtGrad = create("UIGradient", { Rotation = 45, Color = accentPair() })
+        local Art = create("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(56, 56), Size = UDim2.fromOffset(112, 112),
+            BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 17, Parent = Card,
+        }, { create("UICorner", { CornerRadius = rad("CardRadius") }), ArtGrad })
+        create("TextLabel", {
+            Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "♫", Font = S("FontBold"), TextSize = 46,
+            TextColor3 = T("AccentText"), ZIndex = 18, Parent = Art,
+        })
+        table.insert(ThemeHooks, function() ArtGrad.Color = accentPair() end)
 
-        MediaSec:CreateDropdown("Tracks", trackNames, trackNames[1], function(chosen)
-            ActiveSound.SoundId = tracks[chosen]
+        local Col = create("Frame", { Position = UDim2.fromOffset(128, 0), Size = UDim2.new(1, -128, 1, 0), BackgroundTransparency = 1, ZIndex = 17, Parent = Card })
+        local TitleLbl = create("TextLabel", {
+            Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, Text = "Nothing playing", Font = S("FontBold"),
+            TextSize = F(function(_, s) return s.TextSize + 5 end), TextColor3 = T("TextPrimary"), TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18, Parent = Col,
+        })
+        local SubLbl = create("TextLabel", {
+            Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 26), BackgroundTransparency = 1, Text = "Pick a track below",
+            Font = S("Font"), TextSize = tsize(-1), TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 18, Parent = Col,
+        })
+
+        local MN = 48
+        local Viz = create("Frame", { Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 0, 44), BackgroundTransparency = 1, ZIndex = 18, Parent = Col })
+        local vbars = {}
+        for i = 1, MN do
+            vbars[i] = create("Frame", {
+                AnchorPoint = Vector2.new(0, 1), Position = UDim2.new((i - 1) / MN, 0, 1, 0), Size = UDim2.new(1 / MN, -2, 0.06, 0),
+                BackgroundColor3 = Novier.Theme.Accent, BorderSizePixel = 0, ZIndex = 18, Parent = Viz,
+            }, { create("UICorner", { CornerRadius = UDim.new(0, 2) }) })
+        end
+
+        local Bar = create("Frame", {
+            Position = UDim2.fromOffset(0, 106), Size = UDim2.new(1, 0, 0, 6), BackgroundColor3 = T("SurfaceHighlight"), BorderSizePixel = 0, ZIndex = 18, Parent = Col,
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        local Fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = T("Accent"), BorderSizePixel = 0, ZIndex = 19, Parent = Bar },
+            { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        local SeekKnob = create("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(12, 12),
+            BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 20, Parent = Bar,
+        }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        local SeekHit = create("TextButton", { Position = UDim2.fromOffset(0, 96), Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = "", ZIndex = 21, Parent = Col })
+        local TimeL = create("TextLabel", {
+            Position = UDim2.fromOffset(0, 116), Size = UDim2.new(0.5, 0, 0, 14), BackgroundTransparency = 1, Text = "0:00",
+            Font = S("FontCode"), TextSize = tsize(-2), TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 18, Parent = Col,
+        })
+        local TimeR = create("TextLabel", {
+            Position = UDim2.new(0.5, 0, 0, 116), Size = UDim2.new(0.5, 0, 0, 14), BackgroundTransparency = 1, Text = "--:--",
+            Font = S("FontCode"), TextSize = tsize(-2), TextColor3 = T("TextSecondary"), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 18, Parent = Col,
+        })
+
+        local Controls = create("Frame", {
+            Position = UDim2.fromOffset(0, 138), Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1, ZIndex = 18, Parent = Col,
+        }, { create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10) }) })
+        local function circle(text, size, filled, order)
+            return create("TextButton", {
+                LayoutOrder = order, Size = UDim2.fromOffset(size, size), BackgroundColor3 = filled and T("Accent") or T("SurfaceHighlight"), Text = text,
+                Font = S("FontBold"), TextSize = filled and 16 or 15, TextColor3 = filled and T("AccentText") or T("TextPrimary"), AutoButtonColor = false, ZIndex = 19, Parent = Controls,
+            }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+        end
+        local PrevBtn, PlayBtn, NextBtn, LoopBtn = circle("«", 34, false, 1), circle("▶", 42, true, 2), circle("»", 34, false, 3), circle("↻", 34, false, 4)
+
+        local function clock(sec) return string.format("%d:%02d", math.floor(sec / 60), math.floor(sec % 60)) end
+
+        local function setNow(i, label)
+            index = i
+            TitleLbl.Text = label or names[i] or "Nothing playing"
+            for j, b in ipairs(buttons) do b:SetText((j == i and "▶  " or "     ") .. names[j]) end
+        end
+        local function play(i)
+            if #names == 0 then return end
+            i = ((i - 1) % #names) + 1
+            ActiveSound.SoundId = tracks[names[i]]
             ActiveSound.TimePosition = 0
+            ActiveSound.Looped = loop
             ActiveSound:Play()
-            nowPlaying = chosen
-            Novier:Notify("Audio Driver", "Stream: " .. chosen, 2, "Success")
-        end, { Flag = "media_track" })
+            setNow(i)
+        end
+        local function paintLoop() tween(LoopBtn, { BackgroundColor3 = loop and Novier.Theme.Accent or Novier.Theme.SurfaceHighlight, TextColor3 = loop and Novier.Theme.AccentText or Novier.Theme.TextPrimary }, 0.15) end
+        paintLoop()
+        table.insert(ThemeHooks, paintLoop)
 
-        MediaSec:CreateButton("Play / Pause", function()
+        track(PrevBtn.MouseButton1Click:Connect(function() sfx("click"); play(index - 1) end))
+        track(NextBtn.MouseButton1Click:Connect(function() sfx("click"); play(index + 1) end))
+        track(PlayBtn.MouseButton1Click:Connect(function()
+            sfx("click")
             if ActiveSound.IsPlaying then ActiveSound:Pause()
             elseif ActiveSound.IsPaused then ActiveSound:Resume()
-            else ActiveSound:Play() end
+            else play(index) end
+        end))
+        track(LoopBtn.MouseButton1Click:Connect(function() sfx("click"); loop = not loop; ActiveSound.Looped = loop; paintLoop() end))
+        track(ActiveSound.Ended:Connect(function() if not loop then play(index + 1) end end))
+
+        local seeking = false
+        local function seekTo(x)
+            local a = math.clamp((x - Bar.AbsolutePosition.X) / math.max(Bar.AbsoluteSize.X, 1), 0, 1)
+            if ActiveSound.TimeLength > 0 then ActiveSound.TimePosition = a * ActiveSound.TimeLength end
+        end
+        track(SeekHit.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                seeking = true
+                seekTo(input.Position.X)
+            end
+        end))
+        track(UserInputService.InputChanged:Connect(function(input)
+            if seeking and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then seekTo(input.Position.X) end
+        end))
+        track(UserInputService.InputEnded:Connect(function(input)
+            if seeking and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then seeking = false end
+        end))
+
+        local lastSec = -1
+        Window:AddFrameHook(function(an)
+            local pulse = Novier.Style.Pulse * Novier.Settings.Pulse
+            local sz = 112 + (an.beat * 10 + an.bass * 4) * pulse
+            Art.Size = UDim2.fromOffset(sz, sz)
+            for i = 1, MN do
+                local v = an:Sample((i - 1) / (MN - 1))
+                vbars[i].Size = UDim2.new(1 / MN, -2, math.max(0.06, v), 0)
+                vbars[i].BackgroundColor3 = spectrumColor(v)
+            end
+            local len = ActiveSound.TimeLength
+            local a = len > 0 and math.clamp(ActiveSound.TimePosition / len, 0, 1) or 0
+            Fill.Size = UDim2.fromScale(a, 1)
+            SeekKnob.Position = UDim2.new(a, 0, 0.5, 0)
+            local sec = math.floor(ActiveSound.TimePosition)
+            if sec ~= lastSec then
+                lastSec = sec
+                TimeL.Text = clock(ActiveSound.TimePosition)
+                TimeR.Text = len > 0 and clock(len) or "--:--"
+            end
+            PlayBtn.Text = ActiveSound.IsPlaying and "II" or "▶"
+        end)
+        Window:AddTicker(function(an)
+            SubLbl.Text = string.format("BPM %s   ·   LVL %d%%", an.bpm > 1 and tostring(math.floor(an.bpm + 0.5)) or "--", math.floor(an.level * 100))
         end)
 
-        MediaSec:CreateSlider("Master Volume", 0, 200, 50, 1, function(val)
-            ActiveSound.Volume = val / 100
-        end, { Flag = "media_volume", Tooltip = "Above 100% boosts the stream" })
+        local Lib = Tab:CreateSection("Library")
+        for i, n in ipairs(names) do
+            buttons[i] = Lib:CreateButton("     " .. n, function() play(i) end)
+        end
 
-        local FovSec = MediaTab:CreateSection("Beat-Synchronized Camera FOV")
+        local Play = Tab:CreateSection("Playback")
+        Play:CreateSlider("Volume", 0, 200, 50, 1, function(v) ActiveSound.Volume = v / 100 end, { Flag = "media_volume", Tooltip = "Above 100% boosts the stream" })
+        Play:CreateToggle("Loop track", true, function(v) loop = v; ActiveSound.Looped = v; paintLoop() end, { Flag = "media_loop" })
+        Play:CreateTextbox("Custom sound ID", "Paste numeric ID...", false, function(txt, enter)
+            if enter and txt and #txt > 0 then
+                local cleanId = txt:gsub("%D", "")
+                if #cleanId > 0 then
+                    ActiveSound.SoundId = "rbxassetid://" .. cleanId
+                    ActiveSound.TimePosition = 0
+                    ActiveSound.Looped = loop
+                    ActiveSound:Play()
+                    setNow(index, "Custom ID " .. cleanId)
+                    Novier:Notify("Audio", "Playing ID: " .. cleanId, 2, "Success")
+                end
+            end
+        end)
+
+        local FovSec = Tab:CreateSection("Beat-Synchronized Camera FOV")
         local fovToggle = FovSec:CreateToggle("Audio Beat FOV  ([RightAlt])", FOV.Enabled, function(active)
             FOV.Enabled = active
             Novier:Notify("Camera Engine", active and "Beat FOV kick enabled." or "Beat FOV disabled.", 2, active and "Success" or "Warning")
@@ -1693,81 +2277,58 @@ function Novier:CreateWindow(windowTitle)
             if not FOV.Enabled and cam then cam.FieldOfView = val end
         end, { Flag = "fov_base" })
         FovSec:CreateSlider("Beat Kick Intensity", 5, 45, FOV.MaxKick, 1, function(val) FOV.MaxKick = val end, { Flag = "fov_kick" })
-        FovSec:CreateSlider("Kick Smoothness", 5, 60, math.floor(FOV.Smoothness * 100), 1, function(val) FOV.Smoothness = val / 100 end, {
-            Flag = "fov_smooth", Tooltip = "Higher = snappier camera",
-        })
-
-        local CustomSec = MediaTab:CreateSection("Custom Sound ID")
-        local Term = CustomSec:CreateTerminal(80)
-        CustomSec:CreateTextbox("Audio ID", "Paste numeric ID...", false, function(txt, enter)
-            if enter and txt and #txt > 0 then
-                local cleanId = txt:gsub("%D", "")
-                if #cleanId > 0 then
-                    ActiveSound.SoundId = "rbxassetid://" .. cleanId
-                    ActiveSound.TimePosition = 0
-                    ActiveSound:Play()
-                    nowPlaying = "ID " .. cleanId
-                    Term:Log("Mounted sound: " .. cleanId)
-                    Novier:Notify("Audio", "Playing ID: " .. cleanId, 2, "Success")
-                end
-            end
-        end)
-
-        local function clock(sec) return string.format("%d:%02d", math.floor(sec / 60), math.floor(sec % 60)) end
-        Window:AddTicker(function(an)
-            local len = ActiveSound.TimeLength
-            local stamp = (len and len > 0) and (clock(ActiveSound.TimePosition) .. " / " .. clock(len)) or "--:--"
-            NowLabel:Set(string.format("♫ %s   |   %s   |   BPM %s   |   LVL %d%%", nowPlaying, stamp,
-                an.bpm > 1 and tostring(math.floor(an.bpm + 0.5)) or "--", math.floor(an.level * 100)))
-        end)
+        FovSec:CreateSlider("Kick Smoothness", 5, 60, math.floor(FOV.Smoothness * 100), 1, function(val) FOV.Smoothness = val / 100 end,
+            { Flag = "fov_smooth", Tooltip = "Higher = snappier camera" })
 
         return {
             PlayCustom = function(_, id)
                 local cleanId = tostring(id):gsub("%D", "")
                 ActiveSound.SoundId = "rbxassetid://" .. cleanId
                 ActiveSound.TimePosition = 0
+                ActiveSound.Looped = loop
                 ActiveSound:Play()
-                nowPlaying = "ID " .. cleanId
+                setNow(index, "Custom ID " .. cleanId)
             end,
+            Play = function(_, nameOrIndex)
+                if type(nameOrIndex) == "string" then nameOrIndex = table.find(names, nameOrIndex) end
+                play(nameOrIndex or index)
+            end,
+            Next = function() play(index + 1) end,
+            Prev = function() play(index - 1) end,
             FovToggle = fovToggle,
         }
     end
 
     ------------------------------------------------ SETTINGS TAB
     function Window:CreateSettingsTab()
-        local S = Novier.Settings
+        local Opt = Novier.Settings
         local Tab = Window:CreateTab("SETTINGS", "⚙")
 
         local Look = Tab:CreateSection("Appearance")
-        local themeNames = {}
-        for n in pairs(Novier.Themes) do table.insert(themeNames, n) end
-        table.sort(themeNames)
-        Look:CreateDropdown("Theme", themeNames, Novier.ThemeName, function(n) Novier:SetTheme(n) end, { Flag = "ui_theme" })
-        Look:CreateSlider("UI Scale", 60, 130, math.floor(S.UIScale * 100), 5, function(v)
-            S.UIScale = v / 100
+        Look:CreateThemeGrid({ Flag = "ui_theme" })
+        Look:CreateSlider("UI Scale", 60, 130, math.floor(Opt.UIScale * 100), 5, function(v)
+            Opt.UIScale = v / 100
             refreshScale()
         end, { Flag = "ui_scale", Tooltip = "Scales the whole island (phones: try 70%)" })
-        Look:CreateToggle("Show FPS / Ping in pill", S.ShowStats, function(v) S.ShowStats = v end, { Flag = "ui_stats" })
-        Look:CreateToggle("Background Blur when open", S.Blur, function(v)
-            S.Blur = v
-            if Blur then tween(Blur, { Size = (v and Window.DrawerOpen) and 12 or 0 }, 0.25) end
+        Look:CreateToggle("Show FPS / Ping in pill", Opt.ShowStats, function(v) Opt.ShowStats = v end, { Flag = "ui_stats" })
+        Look:CreateToggle("Background blur when open", Opt.Blur, function(v)
+            Opt.Blur = v
+            if Blur then tween(Blur, { Size = (v and Window.DrawerOpen) and 10 or 0 }, 0.25) end
         end, { Flag = "ui_blur" })
-        Look:CreateToggle("UI Sounds", S.UISounds, function(v) S.UISounds = v end, { Flag = "ui_sfx" })
+        Look:CreateToggle("UI sounds", Opt.UISounds, function(v) Opt.UISounds = v end, { Flag = "ui_sfx" })
 
         local Vis = Tab:CreateSection("Visuals")
-        Vis:CreateToggle("Edge Spectrum & Glows", S.EdgeVisuals, function(v) S.EdgeVisuals = v end, { Flag = "vis_edges" })
-        Vis:CreateToggle("Code Rain", S.Rain, function(v) S.Rain = v end, { Flag = "vis_rain" })
-        Vis:CreateToggle("Beat Shockwave Rings", S.Rings, function(v) S.Rings = v end, { Flag = "vis_rings" })
-        Vis:CreateToggle("Idle Breathing (no music)", S.IdleBreathing, function(v) S.IdleBreathing = v end, { Flag = "vis_idle" })
-        Vis:CreateSlider("Visual FPS Cap", 20, 144, S.VisualHz, 1, function(v) S.VisualHz = v end, {
-            Flag = "vis_hz", Tooltip = "Lower this if the visuals cost you frames",
-        })
+        Vis:CreateToggle("Edge spectrum & glows", Opt.EdgeVisuals, function(v) Opt.EdgeVisuals = v end, { Flag = "vis_edges" })
+        Vis:CreateSlider("Edge spectrum size", 0.4, 2, Opt.EdgeSize, 0.1, function(v) Opt.EdgeSize = v end, { Flag = "vis_edge_size", Tooltip = "How far the side bars reach" })
+        Vis:CreateSlider("Pulse strength", 0, 2, Opt.Pulse, 0.1, function(v) Opt.Pulse = v end, { Flag = "vis_pulse", Tooltip = "Glows, rings and border pulse" })
+        Vis:CreateToggle("Code rain", Opt.Rain, function(v) Opt.Rain = v end, { Flag = "vis_rain" })
+        Vis:CreateToggle("Beat shockwave rings", Opt.Rings, function(v) Opt.Rings = v end, { Flag = "vis_rings" })
+        Vis:CreateToggle("Idle breathing (no music)", Opt.IdleBreathing, function(v) Opt.IdleBreathing = v end, { Flag = "vis_idle" })
+        Vis:CreateSlider("Visual FPS cap", 20, 144, Opt.VisualHz, 1, function(v) Opt.VisualHz = v end, { Flag = "vis_hz", Tooltip = "Lower this if the visuals cost you frames" })
 
         local Aud = Tab:CreateSection("Audio Reactivity")
-        Aud:CreateSlider("Sensitivity", 0.3, 2.5, S.Sensitivity, 0.05, function(v) S.Sensitivity = v end, { Flag = "aud_sens" })
-        Aud:CreateToggle("Auto Gain", S.AutoGain, function(v) S.AutoGain = v end, {
-            Flag = "aud_gain", Tooltip = "Normalises quiet & loud tracks so visuals always look full",
-        })
+        Aud:CreateSlider("Sensitivity", 0.3, 2.5, Opt.Sensitivity, 0.05, function(v) Opt.Sensitivity = v end, { Flag = "aud_sens" })
+        Aud:CreateToggle("Auto gain", Opt.AutoGain, function(v) Opt.AutoGain = v end, { Flag = "aud_gain", Tooltip = "Normalises quiet and loud tracks" })
 
         local Keys = Tab:CreateSection("Keybinds")
         Keys:CreateKeybind("Toggle UI", Window.ToggleKey, nil, { Flag = "key_toggle", OnChanged = function(k) if k then Window.ToggleKey = k end end })
@@ -1776,19 +2337,19 @@ function Novier:CreateWindow(windowTitle)
         local Cfg = Tab:CreateSection("Config")
         local cfgName = "default"
         Cfg:CreateTextbox("Config name", "default", false, function(t) if t and #t > 0 then cfgName = t end end)
-        Cfg:CreateButton("Save Config", function()
+        Cfg:CreateButton("Save config", function()
             local ok, err = Novier:SaveConfig(cfgName)
             Novier:Notify("Config", ok and ("Saved '" .. cfgName .. "'") or ("Save failed: " .. tostring(err)), 2.5, ok and "Success" or "Error")
         end)
-        Cfg:CreateButton("Load Config", function()
+        Cfg:CreateButton("Load config", function()
             local ok, err = Novier:LoadConfig(cfgName)
             Novier:Notify("Config", ok and ("Loaded '" .. cfgName .. "'") or ("Load failed: " .. tostring(err)), 2.5, ok and "Success" or "Error")
         end)
         return Tab
     end
 
-    ------------------------------------------------ INTRO ANIMATION
-    Drawer.Visible = false
+    ------------------------------------------------ INTRO
+    Window:AddFrameHook(function() end)
     task.defer(function()
         tween(Pill, { Size = UDim2.fromOffset(cfg.PillWidth, cfg.PillHeight) }, 0.7, Enum.EasingStyle.Back)
     end)
@@ -1806,7 +2367,7 @@ function Novier:Notify(title, message, duration, kind)
     local Holder = Novier._Gui:FindFirstChild("NotifyStack")
     if not Holder then
         Holder = create("Frame", {
-            Name = "NotifyStack", Size = UDim2.fromOffset(300, 460), Position = UDim2.new(1, -16, 1, -24),
+            Name = "NotifyStack", Size = UDim2.fromOffset(310, 460), Position = UDim2.new(1, -16, 1, -24),
             AnchorPoint = Vector2.new(1, 1), BackgroundTransparency = 1, ZIndex = 500, Parent = Novier._Gui,
         }, {
             create("UIListLayout", {
@@ -1821,34 +2382,34 @@ function Novier:Notify(title, message, duration, kind)
     local edge = (kind == "Success" and th.Success) or (kind == "Warning" and th.Warning) or (kind == "Error" and th.Error) or th.Accent
     local icon = (kind == "Success" and "✓") or (kind == "Warning" and "!") or (kind == "Error" and "✕") or "◆"
 
-    -- The slot is what UIListLayout positions; the card inside it is what we tween.
-    local Slot = create("Frame", { Size = UDim2.new(1, 0, 0, 64), BackgroundTransparency = 1, ZIndex = 501, Parent = Holder })
+    local Slot = create("Frame", { Size = UDim2.new(1, 0, 0, 66), BackgroundTransparency = 1, ZIndex = 501, Parent = Holder })
     local Card = create("Frame", {
-        Size = UDim2.fromScale(1, 1), Position = UDim2.fromScale(1.3, 0),
-        BackgroundColor3 = th.PillBackground, ClipsDescendants = true, ZIndex = 501, Parent = Slot,
+        Size = UDim2.fromScale(1, 1), Position = UDim2.fromScale(1.3, 0), BackgroundColor3 = th.SurfaceElevated,
+        ClipsDescendants = true, ZIndex = 501, Parent = Slot,
     }, {
-        create("UICorner", { CornerRadius = UDim.new(0, 10) }),
-        create("UIStroke", { Thickness = 1.3, Color = edge }),
+        create("UICorner", { CornerRadius = rad("CardRadius") }),
+        create("UIStroke", { Thickness = 1.2, Color = edge, Transparency = Novier.Style.Family == "Adwaita" and 0.6 or 0 }),
     })
-    create("Frame", { Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = edge, BorderSizePixel = 0, ZIndex = 502, Parent = Card })
+    create("Frame", {
+        Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = edge, BorderSizePixel = 0, ZIndex = 502,
+        Visible = Novier.Style.Family ~= "Adwaita", Parent = Card,
+    })
     create("TextLabel", {
-        Size = UDim2.fromOffset(28, 28), Position = UDim2.fromOffset(12, 10), BackgroundColor3 = edge, BackgroundTransparency = 0.82,
-        Text = icon, Font = Novier.Config.FontBold, TextSize = 14, TextColor3 = edge, ZIndex = 502, Parent = Card,
+        Size = UDim2.fromOffset(30, 30), Position = UDim2.fromOffset(14, 18), BackgroundColor3 = edge, BackgroundTransparency = 0.82,
+        Text = icon, Font = S("FontBold"), TextSize = 15, TextColor3 = edge, ZIndex = 502, Parent = Card,
     }, { create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
     create("TextLabel", {
-        Size = UDim2.new(1, -60, 0, 16), Position = UDim2.fromOffset(50, 8), BackgroundTransparency = 1,
-        Text = string.upper(tostring(title)), Font = Novier.Config.FontBold, TextSize = 11, TextColor3 = edge,
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 502, Parent = Card,
+        Size = UDim2.new(1, -66, 0, 16), Position = UDim2.fromOffset(54, 9), BackgroundTransparency = 1,
+        Text = Novier.Style.Upper and string.upper(tostring(title)) or tostring(title), Font = S("FontBold"), TextSize = 12,
+        TextColor3 = edge, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 502, Parent = Card,
     })
     create("TextLabel", {
-        Size = UDim2.new(1, -60, 0, 28), Position = UDim2.fromOffset(50, 24), BackgroundTransparency = 1,
-        Text = tostring(message), Font = Novier.Config.FontNormal, TextSize = 11, TextColor3 = th.TextPrimary,
-        TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
-        ZIndex = 502, Parent = Card,
+        Size = UDim2.new(1, -66, 0, 30), Position = UDim2.fromOffset(54, 26), BackgroundTransparency = 1, Text = tostring(message),
+        Font = S("Font"), TextSize = 11, TextColor3 = th.TextPrimary, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 502, Parent = Card,
     })
     local Progress = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = edge,
-        BorderSizePixel = 0, ZIndex = 503, Parent = Card,
+        Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BackgroundColor3 = edge, BorderSizePixel = 0, ZIndex = 503, Parent = Card,
     })
 
     tween(Card, { Position = UDim2.fromScale(0, 0) }, 0.3, Enum.EasingStyle.Back)
